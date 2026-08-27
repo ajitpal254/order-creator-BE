@@ -108,8 +108,9 @@ const startServer = async () => {
     await connectDB();
     await seedDatabase();
 
-    app.listen(PORT, '127.0.0.1', () => {
-      console.log(`[Server] H.A. Overseas API running on http://127.0.0.1:${PORT}`);
+    const HOST = '0.0.0.0';
+    app.listen(PORT, HOST, () => {
+      console.log(`[Server] H.A. Overseas API running on http://${HOST}:${PORT}`);
     });
   } catch (err) {
     console.error('[Fatal Error on Server Start]', err);
