@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Environment Variables (Keep secrets local)
+.env
+.env.*
+!.env.example
+
+# File Uploads & Temp Storage
+uploads/*
+!uploads/.gitkeep
+temp/
+tmp/
+*.pdf
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# IDE & System files
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,700 @@
+{
+  "info": {
+    "_postman_id": "8a7c29e1-6380-4921-9e77-haoverseas2026",
+    "name": "H.A. Overseas - Order Creator API",
+    "description": "Complete Postman API Collection for H.A. Overseas B2B Order Creation & Management Platform.\nIncludes Auth, Product Catalog, Custom Attributes (Finishes, Colors, Brands, Sizes, Categories), B2B Orders, PDF Generation, and Admin Management.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:5000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminUsername",
+      "value": "haoverseas1313",
+      "type": "string"
+    },
+    {
+      "key": "adminPassword",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "sampleProductId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "sampleOrderId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "sampleUserId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "1. Health & Server Info",
+      "item": [
+        {
+          "name": "Root Welcome Endpoint",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": ["{{baseUrl}}"],
+              "path": [""]
+            }
+          }
+        },
+        {
+          "name": "API Health Check",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Authentication",
+      "item": [
+        {
+          "name": "Admin Login (Auto-captures Token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.token) {",
+                  "    pm.collectionVariables.set('token', res.token);",
+                  "    pm.environment.set('token', res.token);",
+                  "    console.log('Token captured successfully!');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usernameOrEmail\": \"{{adminUsername}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Customer Signup",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.token) {",
+                  "    pm.collectionVariables.set('token', res.token);",
+                  "    pm.environment.set('token', res.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerName\": \"John Doe\",\n  \"businessName\": \"Apex Industrial Supplies Ltd\",\n  \"country\": \"United States\",\n  \"phoneNumber\": \"+1-555-0199\",\n  \"address\": \"450 Industrial Parkway, Chicago, IL\",\n  \"username\": \"johndoe_apex\",\n  \"email\": \"johndoe@apexsupplies.com\",\n  \"password\": \"Password123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/signup",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "signup"]
+            }
+          }
+        },
+        {
+          "name": "Customer Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.token) {",
+                  "    pm.collectionVariables.set('token', res.token);",
+                  "    pm.environment.set('token', res.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usernameOrEmail\": \"johndoe@apexsupplies.com\",\n  \"password\": \"Password123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Get Current Profile (Me)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "me"]
+            }
+          }
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerName\": \"John Doe Jr.\",\n  \"businessName\": \"Apex Global Tools\",\n  \"country\": \"United States\",\n  \"phoneNumber\": \"+1-555-9876\",\n  \"address\": \"789 Warehouse Way, Chicago, IL\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "profile"]
+            }
+          }
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@haoverseas.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/forgot-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "forgot-password"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Attributes Management",
+      "item": [
+        {
+          "name": "Get Master Attributes Bundle",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/attributes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "attributes"]
+            }
+          }
+        },
+        {
+          "name": "Finishes - Get All",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/attributes/finishes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "attributes", "finishes"]
+            }
+          }
+        },
+        {
+          "name": "Finishes - Create (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Bronze Antique Brushed\",\n  \"code\": \"BRZ-ANTQ\",\n  \"description\": \"Vintage protective brushed antique bronze layer\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/attributes/finishes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "attributes", "finishes"]
+            }
+          }
+        },
+        {
+          "name": "Colors - Get All",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/attributes/colors",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "attributes", "colors"]
+            }
+          }
+        },
+        {
+          "name": "Colors - Create (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Electric Orange\",\n  \"hexCode\": \"#FF6600\",\n  \"description\": \"High-visibility safety warning orange\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/attributes/colors",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "attributes", "colors"]
+            }
+          }
+        },
+        {
+          "name": "Brands - Get All",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/attributes/brands",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "attributes", "brands"]
+            }
+          }
+        },
+        {
+          "name": "Brands - Create (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"TORQUE-MASTER Industrial\",\n  \"isCustom\": false,\n  \"description\": \"Heavy workshop brand line\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/attributes/brands",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "attributes", "brands"]
+            }
+          }
+        },
+        {
+          "name": "Sizes - Get All",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/attributes/sizes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "attributes", "sizes"]
+            }
+          }
+        },
+        {
+          "name": "Sizes - Create (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"36 Inch (900mm)\",\n  \"unit\": \"inch\",\n  \"categoryType\": \"Pipe Tools\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/attributes/sizes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "attributes", "sizes"]
+            }
+          }
+        },
+        {
+          "name": "Categories - Get All",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/attributes/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "attributes", "categories"]
+            }
+          }
+        },
+        {
+          "name": "Categories - Create (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Hydraulic Pullers & Bearing Tools\",\n  \"description\": \"Heavy duty 2-arm and 3-arm mechanical and hydraulic gear pullers\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/attributes/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "attributes", "categories"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Product Catalog",
+      "item": [
+        {
+          "name": "Get All Products (With Filters & Pagination)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.length > 0) {",
+                  "    pm.collectionVariables.set('sampleProductId', res.data[0]._id);",
+                  "    console.log('Sample Product ID set:', res.data[0]._id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products?page=1&limit=20&search=Grease",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "products"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "search", "value": "Grease" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Single Product By ID",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/{{sampleProductId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "products", "{{sampleProductId}}"]
+            }
+          }
+        },
+        {
+          "name": "Create Product (Admin - JSON)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Professional Pneumatic Air Grease Gun (12,000 PSI)\",\n  \"sku\": \"HAO-GG-AIR12K\",\n  \"category\": \"Grease Guns & Lubrication\",\n  \"description\": \"Continuous cycle air-operated grease gun with 50:1 pressure ratio. Ergonomic rubber grip handle and heavy forged steel head.\",\n  \"basePrice\": 24.50,\n  \"currency\": \"USD\",\n  \"moq\": 25,\n  \"weightKg\": 2.30,\n  \"pcsPerCarton\": 6,\n  \"images\": [\n    \"https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=800&q=80\"\n  ],\n  \"allowedSizes\": [\"500 cc / 16 oz (Grease Gun)\", \"1000 cc / 32 oz (Heavy Gun)\"],\n  \"allowedFinishes\": [\"Powder Coated (High-Durability)\", \"Chrome Plated (Mirror Polish)\"],\n  \"allowedColors\": [\"Industrial Safety Red\", \"Cobalt Blue\", \"Tactical Matte Black\"],\n  \"allowedBrands\": [\"H.A. Overseas (OEM Standard)\", \"Custom Private Label (Buyer Brand)\"],\n  \"specifications\": [\n    { \"key\": \"Inlet Air Pressure\", \"value\": \"40 - 100 PSI\" },\n    { \"key\": \"Pressure Ratio\", \"value\": \"50:1\" },\n    { \"key\": \"Max Output Pressure\", \"value\": \"12,000 PSI\" }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "products"]
+            }
+          }
+        },
+        {
+          "name": "Update Product By ID (Admin)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"basePrice\": 26.00,\n  \"moq\": 20\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/products/{{sampleProductId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "products", "{{sampleProductId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Product By ID (Admin)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/{{sampleProductId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "products", "{{sampleProductId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. B2B Orders & Quotations",
+      "item": [
+        {
+          "name": "Create New Custom Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data._id) {",
+                  "    pm.collectionVariables.set('sampleOrderId', res.data._id);",
+                  "    console.log('Created Order ID set:', res.data._id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"product\": \"{{sampleProductId}}\",\n      \"name\": \"Heavy-Duty Lever Type Grease Gun (10,000 PSI)\",\n      \"sku\": \"HAO-GG-500L\",\n      \"finish\": \"Powder Coated (High-Durability)\",\n      \"color\": \"Industrial Safety Red\",\n      \"brand\": \"Custom Private Label (Buyer Brand)\",\n      \"size\": \"500 cc / 16 oz (Grease Gun)\",\n      \"quantity\": 100,\n      \"unitPrice\": 8.50,\n      \"customNotes\": \"Laser engrave 'APEX-PRO' on barrel body. Custom branded color box packing.\"\n    }\n  ],\n  \"poNumber\": \"PO-2026-APEX-8901\",\n  \"customerNotes\": \"Please arrange sea freight quote to Long Beach Port (FOB Nhava Sheva).\",\n  \"shippingAddress\": {\n    \"contactName\": \"John Doe\",\n    \"company\": \"Apex Industrial Supplies Ltd\",\n    \"street\": \"450 Industrial Parkway, Dock 4\",\n    \"city\": \"Chicago\",\n    \"state\": \"IL\",\n    \"zipCode\": \"60601\",\n    \"country\": \"United States\",\n    \"phone\": \"+1-555-0199\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Get My Orders (Customer View)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/my-orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "my-orders"]
+            }
+          }
+        },
+        {
+          "name": "Get All Orders (Admin View)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.length > 0) {",
+                  "    pm.collectionVariables.set('sampleOrderId', res.data[0]._id);",
+                  "    console.log('Sample Order ID set:', res.data[0]._id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders?status=Pending&page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders"],
+              "query": [
+                { "key": "status", "value": "Pending" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Single Order By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/{{sampleOrderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "{{sampleOrderId}}"]
+            }
+          }
+        },
+        {
+          "name": "Download Official Order PDF Quotation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/{{sampleOrderId}}/pdf",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "{{sampleOrderId}}", "pdf"]
+            }
+          }
+        },
+        {
+          "name": "Update Order Status & Production Notes (Admin)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Confirmed\",\n  \"adminNotes\": \"Proforma Invoice sent. Production scheduled at Jalandhar unit.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/{{sampleOrderId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "{{sampleOrderId}}", "status"]
+            }
+          }
+        },
+        {
+          "name": "Get Executive Summary & Analytics (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/stats/summary",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "stats", "summary"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. User Management (Admin)",
+      "item": [
+        {
+          "name": "Get Registered Customers List",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.length > 0) {",
+                  "    pm.collectionVariables.set('sampleUserId', res.data[0]._id);",
+                  "    console.log('Sample User ID set:', res.data[0]._id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users?search=",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users"],
+              "query": [
+                { "key": "search", "value": "" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Toggle User Active / Suspend Status",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{sampleUserId}}/toggle-status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "{{sampleUserId}}", "toggle-status"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
