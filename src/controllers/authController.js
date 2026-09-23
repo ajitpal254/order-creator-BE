@@ -1,6 +1,53 @@
 import { User } from '../models/User.js';
-import { generateToken } from '../utils/token.js';
+import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../utils/token.js';
 import crypto from 'crypto';
+
+const REFRESH_COOKIE_NAME = 'hao_refresh_token';
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+};
+
+const sendAuthResponse = async (res, statusCode, user, message) => {
+  const accessToken = generateAccessToken(user);
+  const refreshToken = generateRefreshToken(user);
+
+  // Store refresh token in user document (prune old expired tokens)
+  const now = new Date();
+  user.refreshTokens = (user.refreshTokens || []).filter(
+    (rt) => rt.expiresAt && rt.expiresAt > now
+  );
+  user.refreshTokens.push({
+    token: refreshToken,
+    createdAt: now,
+    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+  });
+
+  await user.save();
+
+  res.cookie(REFRESH_COOKIE_NAME, refreshToken, COOKIE_OPTIONS);
+
+  return res.status(statusCode).json({
+    success: true,
+    message,
+    token: accessToken,
+    accessToken,
+    user: {
+      id: user._id,
+      customerName: user.customerName,
+      businessName: user.businessName,
+      country: user.country,
+      phoneNumber: user.phoneNumber,
+      address: user.address,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      distributorTier: user.distributorTier,
+    },
+  });
+};
 
 // @desc Register a new user
 // @route POST /api/auth/signup
@@ -16,30 +63,6 @@ export const signup = async (req, res) => {
       email,
       password,
     } = req.body;
-
-    // Strict validation
-    if (
-      !customerName ||
-      !businessName ||
-      !country ||
-      !phoneNumber ||
-      !address ||
-      !username ||
-      !email ||
-      !password
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: 'All fields (Customer Name, Business, Country, Phone, Address, Username, Email, Password) are required.',
-      });
-    }
-
-    if (password.length < 6) {
-      return res.status(400).json({
-        success: false,
-        message: 'Password must be at least 6 characters long.',
-      });
-    }
 
     // Check existing
     const existingUser = await User.findOne({
@@ -70,24 +93,12 @@ export const signup = async (req, res) => {
 
     await newUser.save();
 
-    const token = generateToken(newUser);
-
-    return res.status(201).json({
-      success: true,
-      message: 'Account created successfully! Welcome to H.A. Overseas.',
-      token,
-      user: {
-        id: newUser._id,
-        customerName: newUser.customerName,
-        businessName: newUser.businessName,
-        country: newUser.country,
-        phoneNumber: newUser.phoneNumber,
-        address: newUser.address,
-        username: newUser.username,
-        email: newUser.email,
-        role: newUser.role,
-      },
-    });
+    return await sendAuthResponse(
+      res,
+      201,
+      newUser,
+      'Account created successfully! Welcome to H.A. Overseas.'
+    );
   } catch (error) {
     console.error('[Auth Signup Error]', error);
     return res.status(500).json({
@@ -103,13 +114,6 @@ export const signup = async (req, res) => {
 export const login = async (req, res) => {
   try {
     const { usernameOrEmail, password } = req.body;
-
-    if (!usernameOrEmail || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide both username/email and password.',
-      });
-    }
 
     const cleanIdentifier = usernameOrEmail.toLowerCase().trim();
 
@@ -139,24 +143,12 @@ export const login = async (req, res) => {
       });
     }
 
-    const token = generateToken(user);
-
-    return res.status(200).json({
-      success: true,
-      message: `Welcome back, ${user.customerName || user.username}!`,
-      token,
-      user: {
-        id: user._id,
-        customerName: user.customerName,
-        businessName: user.businessName,
-        country: user.country,
-        phoneNumber: user.phoneNumber,
-        address: user.address,
-        username: user.username,
-        email: user.email,
-        role: user.role,
-      },
-    });
+    return await sendAuthResponse(
+      res,
+      200,
+      user,
+      `Welcome back, ${user.customerName || user.username}!`
+    );
   } catch (error) {
     console.error('[Auth Login Error]', error);
     return res.status(500).json({
@@ -167,11 +159,128 @@ export const login = async (req, res) => {
   }
 };
 
+// @desc Refresh Access Token using HttpOnly Refresh Token
+// @route POST /api/auth/refresh
+export const refreshTokenHandler = async (req, res) => {
+  try {
+    const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME] || req.body?.refreshToken;
+
+    if (!refreshToken) {
+      return res.status(401).json({
+        success: false,
+        message: 'Refresh token missing. Please log in again.',
+      });
+    }
+
+    let decoded;
+    try {
+      decoded = verifyRefreshToken(refreshToken);
+    } catch (err) {
+      res.clearCookie(REFRESH_COOKIE_NAME, COOKIE_OPTIONS);
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid or expired refresh token. Please log in again.',
+      });
+    }
+
+    const user = await User.findById(decoded.id);
+    if (!user || !user.isActive) {
+      res.clearCookie(REFRESH_COOKIE_NAME, COOKIE_OPTIONS);
+      return res.status(401).json({
+        success: false,
+        message: 'Session revoked or user inactive.',
+      });
+    }
+
+    // Verify token exists in user's active refresh tokens
+    const tokenRecord = user.refreshTokens?.find((rt) => rt.token === refreshToken);
+    if (!tokenRecord) {
+      res.clearCookie(REFRESH_COOKIE_NAME, COOKIE_OPTIONS);
+      return res.status(401).json({
+        success: false,
+        message: 'Refresh token has been invalidated or rotated.',
+      });
+    }
+
+    // Token rotation: Remove old refresh token and issue new pair
+    user.refreshTokens = user.refreshTokens.filter((rt) => rt.token !== refreshToken);
+    
+    return await sendAuthResponse(res, 200, user, 'Token refreshed successfully');
+  } catch (error) {
+    console.error('[Token Refresh Error]', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to refresh token.',
+      error: error.message,
+    });
+  }
+};
+
+// @desc Logout user & clear refresh cookies
+// @route POST /api/auth/logout
+export const logout = async (req, res) => {
+  try {
+    const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME] || req.body?.refreshToken;
+
+    if (refreshToken && req.user?._id) {
+      await User.findByIdAndUpdate(req.user._id, {
+        $pull: { refreshTokens: { token: refreshToken } },
+      });
+    }
+
+    res.clearCookie(REFRESH_COOKIE_NAME, COOKIE_OPTIONS);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Logged out successfully.',
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Error during logout.',
+      error: error.message,
+    });
+  }
+};
+
 // @desc Google / Firebase OAuth login
 // @route POST /api/auth/google
 export const googleAuth = async (req, res) => {
   try {
-    const { email, customerName, firebaseUid, photoUrl } = req.body;
+    const { idToken, email: rawEmail, customerName: rawCustomerName, firebaseUid: rawUid } = req.body;
+
+    let email = rawEmail;
+    let customerName = rawCustomerName;
+    let firebaseUid = rawUid;
+
+    // Cryptographic server-side verification of Google/Firebase ID token
+    if (idToken) {
+      try {
+        const verifyRes = await fetch(
+          `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`
+        );
+        if (!verifyRes.ok) {
+          return res.status(401).json({
+            success: false,
+            message: 'Invalid or expired Google authentication token.',
+          });
+        }
+        const tokenData = await verifyRes.json();
+        email = tokenData.email;
+        firebaseUid = tokenData.sub;
+        customerName = tokenData.name || customerName;
+      } catch (err) {
+        return res.status(401).json({
+          success: false,
+          message: 'Failed to verify Google identity: ' + err.message,
+        });
+      }
+    } else if (process.env.NODE_ENV === 'production') {
+      return res.status(400).json({
+        success: false,
+        message: 'Google ID token is required for secure authentication in production.',
+      });
+    }
 
     if (!email) {
       return res.status(400).json({
@@ -183,7 +292,6 @@ export const googleAuth = async (req, res) => {
     let user = await User.findOne({ email: email.toLowerCase().trim() });
 
     if (!user) {
-      // Auto-provision Google user
       const baseUsername = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'user';
       const uniqueUsername = `${baseUsername}_${Math.floor(1000 + Math.random() * 9000)}`;
       const randomPassword = crypto.randomBytes(24).toString('hex') + 'Aa1!';
@@ -204,24 +312,8 @@ export const googleAuth = async (req, res) => {
       await user.save();
     }
 
-    const token = generateToken(user);
+    return await sendAuthResponse(res, 200, user, 'Google Sign-in successful!');
 
-    return res.status(200).json({
-      success: true,
-      message: 'Google Sign-in successful!',
-      token,
-      user: {
-        id: user._id,
-        customerName: user.customerName,
-        businessName: user.businessName,
-        country: user.country,
-        phoneNumber: user.phoneNumber,
-        address: user.address,
-        username: user.username,
-        email: user.email,
-        role: user.role,
-      },
-    });
   } catch (error) {
     console.error('[Google Auth Error]', error);
     return res.status(500).json({
@@ -243,7 +335,6 @@ export const forgotPassword = async (req, res) => {
 
     const user = await User.findOne({ email: email.toLowerCase().trim() });
     if (!user) {
-      // Return positive message for security reasons
       return res.status(200).json({
         success: true,
         message: 'If an account exists with that email, password reset instructions have been dispatched.',
@@ -258,7 +349,7 @@ export const forgotPassword = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: 'Password reset link generated. (In production, this is emailed to the user).',
-      debugResetToken: resetToken, // For development convenience
+      debugResetToken: resetToken,
     });
   } catch (error) {
     console.error('[Forgot Password Error]', error);
@@ -347,6 +438,7 @@ export const updateProfile = async (req, res) => {
         username: user.username,
         email: user.email,
         role: user.role,
+        distributorTier: user.distributorTier,
       },
     });
   } catch (error) {

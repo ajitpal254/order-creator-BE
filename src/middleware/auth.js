@@ -1,4 +1,4 @@
-import { verifyToken } from '../utils/token.js';
+import { verifyAccessToken } from '../utils/token.js';
 import { User } from '../models/User.js';
 
 export const protect = async (req, res, next) => {
@@ -21,7 +21,7 @@ export const protect = async (req, res, next) => {
       });
     }
 
-    const decoded = verifyToken(token);
+    const decoded = verifyAccessToken(token);
     const user = await User.findById(decoded.id).select('-password');
 
     if (!user) {
@@ -49,13 +49,35 @@ export const protect = async (req, res, next) => {
   }
 };
 
-export const adminOnly = (req, res, next) => {
-  if (req.user && req.user.role === 'admin') {
+/**
+ * Middleware to restrict access to specific user roles
+ * @param  {...string} roles - Allowed roles (e.g. 'admin', 'sales_manager', etc.)
+ */
+export const authorizeRoles = (...roles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required.',
+      });
+    }
+
+    // super_admin always passes
+    if (req.user.role === 'super_admin' || req.user.role === 'admin') {
+      return next();
+    }
+
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: `Forbidden: Role "${req.user.role}" does not have required permissions.`,
+      });
+    }
+
     next();
-  } else {
-    return res.status(403).json({
-      success: false,
-      message: 'Forbidden: Admin access required.',
-    });
-  }
+  };
+};
+
+export const adminOnly = (req, res, next) => {
+  return authorizeRoles('admin', 'super_admin')(req, res, next);
 };

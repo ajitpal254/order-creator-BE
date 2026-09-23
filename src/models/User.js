@@ -51,9 +51,29 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['user', 'admin'],
+      enum: ['user', 'buyer', 'admin', 'sales_manager', 'production_supervisor', 'qc_inspector', 'shipping_officer', 'super_admin'],
       default: 'user',
     },
+    distributorTier: {
+      type: String,
+      enum: ['Standard', 'Bronze', 'Silver', 'Gold', 'Platinum'],
+      default: 'Standard',
+    },
+    refreshTokens: [
+      {
+        token: {
+          type: String,
+          required: true,
+        },
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+        expiresAt: {
+          type: Date,
+        },
+      },
+    ],
     firebaseUid: {
       type: String,
       default: null,

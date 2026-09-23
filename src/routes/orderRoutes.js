@@ -6,27 +6,53 @@ import {
   getAllOrders,
   updateOrderStatus,
   downloadOrderPdf,
-  getAdminStats,
+  getOrderStats,
+  getActiveDraft,
+  convertQuoteToOrder,
+  getBuyerAnalytics,
+  retryInvoiceSync,
 } from '../controllers/orderController.js';
-import { protect, adminOnly } from '../middleware/auth.js';
+import { protect, authorizeRoles } from '../middleware/auth.js';
+import { validate, createOrderSchema, updateOrderStatusSchema } from '../middleware/validate.js';
 
 const router = express.Router();
 
-// User routes
-router.post('/', protect, createOrder);
+const staffRoles = [
+  'admin',
+  'sales_manager',
+  'production_supervisor',
+  'qc_inspector',
+  'shipping_officer',
+  'super_admin',
+];
+
+router.post('/', protect, validate({ body: createOrderSchema }), createOrder);
 router.get('/my-orders', protect, getMyOrders);
-
-// Admin stats
-router.get('/stats/summary', protect, adminOnly, getAdminStats);
-
-// Admin get all
-router.get('/', protect, adminOnly, getAllOrders);
-
-// Shared / authorized single order
-router.get('/:id', protect, getOrderById);
+router.get('/draft', protect, getActiveDraft);
+router.get('/buyer-analytics', protect, getBuyerAnalytics);
+router.get('/stats/overview', protect, authorizeRoles(...staffRoles), getOrderStats);
 router.get('/:id/pdf', protect, downloadOrderPdf);
+router.get('/:id', protect, getOrderById);
 
-// Admin update status
-router.patch('/:id/status', protect, adminOnly, updateOrderStatus);
+// Admin & Staff operations
+router.get('/', protect, authorizeRoles(...staffRoles), getAllOrders);
+router.patch(
+  '/:id/status',
+  protect,
+  validate({ body: updateOrderStatusSchema }),
+  updateOrderStatus
+);
+router.post(
+  '/:id/convert-quote',
+  protect,
+  authorizeRoles(...staffRoles),
+  convertQuoteToOrder
+);
+router.post(
+  '/:id/retry-invoice',
+  protect,
+  authorizeRoles(...staffRoles),
+  retryInvoiceSync
+);
 
 export default router;
