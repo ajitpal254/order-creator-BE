@@ -18,7 +18,6 @@ import productRoutes from './routes/productRoutes.js';
 import orderRoutes from './routes/orderRoutes.js';
 import invoiceRoutes from './routes/invoiceRoutes.js';
 import userRoutes from './routes/userRoutes.js';
-import internalRoutes from './routes/internalRoutes.js';
 import { sanitizeMongoInput } from './middleware/mongoSanitize.js';
 
 dotenv.config();
@@ -116,7 +115,6 @@ app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/internal', internalRoutes);
 
 
 // Root Endpoint & Health Checks
