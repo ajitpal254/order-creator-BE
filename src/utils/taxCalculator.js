@@ -43,7 +43,7 @@ export function calculateInvoiceTotals(invoiceData) {
     return {
       product: item.product || null,
       productName: item.productName || item.description || 'Industrial Tool',
-      description: item.description || item.productName || 'Export Hardware',
+      description: item.productName || item.description || 'Industrial Tool',
       sku: item.sku || 'N/A',
       hsnCode: item.hsnCode || '8205.59',
       quantity,
@@ -100,7 +100,9 @@ export function calculateInvoiceTotals(invoiceData) {
     taxAmount = 0;
   }
 
-  const exactGrandTotal = roundToTwoDecimals(taxableAmount + taxAmount);
+  const shippingCharges = Number(invoiceData.shippingCharges) > 0 ? roundToTwoDecimals(Number(invoiceData.shippingCharges)) : 0;
+
+  const exactGrandTotal = roundToTwoDecimals(taxableAmount + taxAmount + shippingCharges);
   const roundedGrandTotal = Math.round(exactGrandTotal);
   const roundOff = roundToTwoDecimals(roundedGrandTotal - exactGrandTotal);
   const grandTotal = docType === 'gst_invoice' ? roundedGrandTotal : exactGrandTotal;
@@ -116,6 +118,7 @@ export function calculateInvoiceTotals(invoiceData) {
     subtotal,
     discountAmount,
     taxableAmount,
+    shippingCharges,
     isIgst,
     igstAmount,
     cgstAmount,

@@ -32,19 +32,23 @@ export const createInvoice = async (req, res) => {
   try {
     const {
       orderId,
+      invoiceNumber: customInvoiceNumber,
       docType = 'commercial_invoice',
       currency,
       incoterm,
       customerDetails: customCustomer,
+      senderDetails: customSender,
       discountType = 'amount',
       discountValue = 0,
       taxRate = 0,
+      shippingCharges = 0,
       items: rawItems,
       notes,
       termsAndConditions,
       countryOfDestination,
       portOfDischarge,
       shippingMarks,
+      invoiceDate,
       dueDate,
     } = req.body;
 
@@ -103,13 +107,16 @@ export const createInvoice = async (req, res) => {
         return res.status(400).json({ success: false, message: 'Standalone invoice requires at least one item' });
       }
 
+      const custName = (customCustomer?.customerName || customCustomer?.businessName || req.user.customerName || req.user.username || 'Direct Client').trim();
+      const bizName = (customCustomer?.businessName || customCustomer?.customerName || req.user.businessName || '').trim();
+
       resolvedCustomer = {
-        customerName: customCustomer?.customerName || req.user.customerName,
-        businessName: customCustomer?.businessName || req.user.businessName,
-        country: customCustomer?.country || req.user.country,
-        phoneNumber: customCustomer?.phoneNumber || req.user.phoneNumber,
-        address: customCustomer?.address || req.user.address,
-        email: customCustomer?.email || req.user.email,
+        customerName: custName,
+        businessName: bizName,
+        country: customCustomer?.country || req.user.country || 'Canada',
+        phoneNumber: customCustomer?.phoneNumber || req.user.phoneNumber || '',
+        address: customCustomer?.address || req.user.address || '',
+        email: customCustomer?.email || req.user.email || '',
         taxId: customCustomer?.taxId || '',
         stateCode: customCustomer?.stateCode || '',
       };
@@ -152,36 +159,48 @@ export const createInvoice = async (req, res) => {
       discountType,
       discountValue,
       taxRate,
-      senderStateCode: process.env.SENDER_STATE_CODE || '03', // Punjab (H.A. Overseas HQ) — override via SENDER_STATE_CODE env var
+      shippingCharges,
+      senderStateCode: customSender?.stateCode || process.env.SENDER_STATE_CODE || '03', // Punjab (H.A. Overseas HQ)
       recipientStateCode: resolvedCustomer.stateCode || '',
     });
 
-    // Unique invoice number generation with collision-safe retry loop
-    let invoiceNumber;
-    let collisionAttempts = 0;
-    const MAX_ATTEMPTS = 5;
-    while (collisionAttempts < MAX_ATTEMPTS) {
-      const candidate = linkedOrder
-        ? generateInvoiceNumber('INV', linkedOrder.orderNumber)
-        : generateInvoiceNumber('INV');
-      const exists = await Invoice.findOne({ invoiceNumber: candidate }).lean();
-      if (!exists) {
-        invoiceNumber = candidate;
-        break;
+    // Determine Invoice Number: either custom requested or auto-generated
+    let invoiceNumber = customInvoiceNumber ? customInvoiceNumber.trim().toUpperCase() : null;
+    if (invoiceNumber) {
+      const existing = await Invoice.findOne({ invoiceNumber }).lean();
+      if (existing) {
+        return res.status(409).json({
+          success: false,
+          message: `Invoice number "${invoiceNumber}" already exists. Please provide a unique invoice number or leave blank to auto-generate.`,
+        });
       }
-      collisionAttempts++;
-    }
-    if (!invoiceNumber) {
-      throw new Error('Unable to generate a unique invoice number after multiple attempts. Please retry.');
+    } else {
+      let collisionAttempts = 0;
+      const MAX_ATTEMPTS = 5;
+      while (collisionAttempts < MAX_ATTEMPTS) {
+        const candidate = linkedOrder
+          ? generateInvoiceNumber('INV', linkedOrder.orderNumber)
+          : generateInvoiceNumber('INV');
+        const exists = await Invoice.findOne({ invoiceNumber: candidate }).lean();
+        if (!exists) {
+          invoiceNumber = candidate;
+          break;
+        }
+        collisionAttempts++;
+      }
+      if (!invoiceNumber) {
+        throw new Error('Unable to generate a unique invoice number after multiple attempts. Please retry.');
+      }
     }
 
     const invoice = new Invoice({
       invoiceNumber,
       docType,
-      status: 'draft', // Invoices start as drafts; staff advances to 'sent' after review
+      status: req.body.status && ['draft', 'sent'].includes(req.body.status) ? req.body.status : 'sent', // Default to sent/active
       order: linkedOrder?._id || null,
       user: targetUser,
       customerDetails: resolvedCustomer,
+      ...(customSender ? { senderDetails: { ...customSender } } : {}),
       items: calculation.items,
       currency: resolvedCurrency,
       incoterm: resolvedIncoterm,
@@ -193,6 +212,7 @@ export const createInvoice = async (req, res) => {
       taxableAmount: calculation.taxableAmount,
       taxRate,
       taxAmount: calculation.taxAmount,
+      shippingCharges: calculation.shippingCharges || Number(shippingCharges) || 0,
       isIgst: calculation.isIgst,
       cgstAmount: calculation.cgstAmount,
       sgstAmount: calculation.sgstAmount,
@@ -207,6 +227,7 @@ export const createInvoice = async (req, res) => {
       shippingMarks: shippingMarks || linkedOrder?.shippingMarks || '',
       notes: notes || '',
       termsAndConditions: termsAndConditions || undefined,
+      invoiceDate: invoiceDate ? new Date(invoiceDate) : new Date(),
       dueDate: dueDate ? new Date(dueDate) : undefined,
     });
 
@@ -319,13 +340,14 @@ export const getInvoiceById = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Not authorized to view this invoice' });
     }
 
-    return res.status(200).json({ success: true, invoice });
+    return res.status(200).json({ success: true, data: invoice, invoice });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
 // @desc Update Invoice details (recalculates totals server-side)
+// @desc Update an existing invoice (draft or sent)
 // @route PUT /api/invoices/:id
 export const updateInvoice = async (req, res) => {
   try {
@@ -335,8 +357,14 @@ export const updateInvoice = async (req, res) => {
     }
 
     const isStaff = isStaffUser(req.user);
-    if (!isStaff) {
-      return res.status(403).json({ success: false, message: 'Only staff can modify invoice records' });
+    const isOwner = invoice.user && req.user && (
+      invoice.user.toString() === req.user._id?.toString() ||
+      invoice.user.toString() === req.user.id?.toString() ||
+      invoice.user.toString() === req.user.userId?.toString()
+    );
+
+    if (!isStaff && !isOwner) {
+      return res.status(403).json({ success: false, message: 'You do not have permission to modify this invoice record' });
     }
 
     if (invoice.status === 'void') {
@@ -344,32 +372,62 @@ export const updateInvoice = async (req, res) => {
     }
 
     const {
+      invoiceNumber,
       docType,
       currency,
       incoterm,
+      senderDetails,
       customerDetails,
       discountType,
       discountValue,
       taxRate,
+      shippingCharges,
       items,
       status,
       notes,
       termsAndConditions,
       shippingMarks,
+      invoiceDate,
       dueDate,
     } = req.body;
+
+    if (invoiceNumber && invoiceNumber.trim() && invoiceNumber.trim().toUpperCase() !== invoice.invoiceNumber) {
+      const newNum = invoiceNumber.trim().toUpperCase();
+      const existing = await Invoice.findOne({ invoiceNumber: newNum, _id: { $ne: invoice._id } }).lean();
+      if (existing) {
+        return res.status(409).json({
+          success: false,
+          message: `Invoice number "${newNum}" is already in use by another invoice.`,
+        });
+      }
+      invoice.invoiceNumber = newNum;
+    }
 
     if (docType) invoice.docType = docType;
     if (currency) invoice.currency = currency;
     if (incoterm) invoice.incoterm = incoterm;
-    if (customerDetails) invoice.customerDetails = { ...invoice.customerDetails, ...customerDetails };
+    if (senderDetails) {
+      invoice.senderDetails = { ...(invoice.senderDetails?.toObject?.() || invoice.senderDetails || {}), ...senderDetails };
+    }
+    if (customerDetails) {
+      invoice.customerDetails = { ...(invoice.customerDetails?.toObject?.() || invoice.customerDetails || {}), ...customerDetails };
+    }
     if (notes !== undefined) invoice.notes = notes;
     if (termsAndConditions !== undefined) invoice.termsAndConditions = termsAndConditions;
     if (shippingMarks !== undefined) invoice.shippingMarks = shippingMarks;
+    if (invoiceDate) invoice.invoiceDate = new Date(invoiceDate);
     if (dueDate) invoice.dueDate = new Date(dueDate);
     if (status && ['draft', 'sent'].includes(status)) invoice.status = status;
 
-    if (items || discountType !== undefined || discountValue !== undefined || taxRate !== undefined) {
+    if (
+      items !== undefined ||
+      discountType !== undefined ||
+      discountValue !== undefined ||
+      taxRate !== undefined ||
+      shippingCharges !== undefined ||
+      docType !== undefined ||
+      currency !== undefined
+    ) {
       const itemsToCalc = items || invoice.items;
       const calculation = calculateInvoiceTotals({
         items: itemsToCalc,
@@ -378,7 +436,8 @@ export const updateInvoice = async (req, res) => {
         discountType: discountType || invoice.discountType,
         discountValue: discountValue !== undefined ? discountValue : invoice.discountValue,
         taxRate: taxRate !== undefined ? taxRate : invoice.taxRate,
-        senderStateCode: process.env.SENDER_STATE_CODE || '03',
+        shippingCharges: shippingCharges !== undefined ? shippingCharges : (invoice.shippingCharges || 0),
+        senderStateCode: invoice.senderDetails?.stateCode || process.env.SENDER_STATE_CODE || '03',
         recipientStateCode: invoice.customerDetails?.stateCode || '',
       });
 
@@ -391,6 +450,7 @@ export const updateInvoice = async (req, res) => {
       invoice.taxableAmount = calculation.taxableAmount;
       invoice.taxRate = taxRate !== undefined ? taxRate : invoice.taxRate;
       invoice.taxAmount = calculation.taxAmount;
+      invoice.shippingCharges = calculation.shippingCharges || Number(shippingCharges !== undefined ? shippingCharges : invoice.shippingCharges) || 0;
       invoice.isIgst = calculation.isIgst;
       invoice.cgstAmount = calculation.cgstAmount;
       invoice.sgstAmount = calculation.sgstAmount;
@@ -402,7 +462,7 @@ export const updateInvoice = async (req, res) => {
     }
 
     await invoice.save();
-    return res.status(200).json({ success: true, message: 'Invoice updated successfully', invoice });
+    return res.status(200).json({ success: true, message: 'Invoice updated successfully', data: invoice, invoice });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }

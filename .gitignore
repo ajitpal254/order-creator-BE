@@ -22,3 +22,8 @@ npm-debug.log*
 .DS_Store
 .idea/
 .vscode/
+
+# Local scripts & migrations
+src/scripts/
+scripts/
+

@@ -62,7 +62,7 @@ const invoiceItemSchema = new mongoose.Schema({
   quantity: {
     type: Number,
     required: true,
-    min: [1, 'Quantity must be at least 1'],
+    min: [0.0001, 'Quantity or hours must be positive'],
   },
   unit: {
     type: String,
@@ -162,7 +162,7 @@ const invoiceSchema = new mongoose.Schema(
     items: [invoiceItemSchema],
     currency: {
       type: String,
-      enum: ['USD', 'EUR', 'GBP', 'AUD', 'INR'],
+      enum: ['USD', 'EUR', 'GBP', 'AUD', 'INR', 'CAD'],
       default: 'USD',
     },
     currencyRate: {
@@ -204,6 +204,10 @@ const invoiceSchema = new mongoose.Schema(
       default: 0,
     },
     taxAmount: {
+      type: Number,
+      default: 0,
+    },
+    shippingCharges: {
       type: Number,
       default: 0,
     },

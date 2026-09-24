@@ -72,7 +72,7 @@ export const createOrderSchema = z.object({
     .optional(),
   status: z.enum(['Draft', 'Submitted']).optional().default('Submitted'),
   orderType: z.enum(['Order', 'Quote']).optional().default('Order'),
-  currency: z.enum(['USD', 'EUR', 'GBP', 'AUD']).optional().default('USD'),
+  currency: z.enum(['USD', 'EUR', 'GBP', 'AUD', 'INR', 'CAD']).optional().default('USD'),
   incoterm: z.enum(['FOB', 'CIF', 'EXW']).optional().default('FOB'),
 });
 
@@ -108,7 +108,7 @@ export const invoiceItemInputSchema = z.object({
   sku: z.string().optional(),
   description: z.string().optional(),
   hsnCode: z.string().optional(),
-  quantity: z.coerce.number().int().positive('Quantity must be at least 1'),
+  quantity: z.coerce.number().positive('Quantity or hours must be greater than 0'),
   unit: z.string().optional().default('PCS'),
   unitPrice: z.coerce.number().nonnegative('Unit price cannot be negative'),
   discountPercent: z.coerce.number().min(0).max(100).optional().default(0),
@@ -117,15 +117,16 @@ export const invoiceItemInputSchema = z.object({
 
 export const createInvoiceSchema = z.object({
   orderId: z.string().optional().nullable(),
+  invoiceNumber: z.string().optional().nullable(),
   docType: z
     .enum(['commercial_invoice', 'gst_invoice', 'proforma_invoice', 'standard_invoice', 'eway_bill'])
     .optional()
     .default('commercial_invoice'),
-  currency: z.enum(['USD', 'EUR', 'GBP', 'AUD', 'INR']).optional().default('USD'),
+  currency: z.enum(['USD', 'EUR', 'GBP', 'AUD', 'INR', 'CAD']).optional().default('USD'),
   incoterm: z.enum(['FOB', 'CIF', 'EXW']).optional().default('FOB'),
   customerDetails: z
     .object({
-      customerName: z.string().min(1, 'Customer name is required'),
+      customerName: z.string().optional().default(''),
       businessName: z.string().optional().default(''),
       country: z.string().optional().default(''),
       phoneNumber: z.string().optional().default(''),
@@ -135,22 +136,52 @@ export const createInvoiceSchema = z.object({
       stateCode: z.string().optional().default(''),
     })
     .optional(),
+  senderDetails: z
+    .object({
+      companyName: z.string().optional().default(''),
+      address: z.string().optional().default(''),
+      phoneNumber: z.string().optional().default(''),
+      phone: z.string().optional().default(''),
+      email: z.string().optional().default(''),
+      gstin: z.string().optional().default(''),
+      iecNo: z.string().optional().default(''),
+      pan: z.string().optional().default(''),
+      stateCode: z.string().optional().default(''),
+    })
+    .optional(),
   discountType: z.enum(['percent', 'amount']).optional().default('amount'),
   discountValue: z.coerce.number().nonnegative().optional().default(0),
   taxRate: z.coerce.number().min(0).max(100).optional().default(0),
+  shippingCharges: z.coerce.number().min(0).optional().default(0),
   items: z.array(invoiceItemInputSchema).optional(),
   notes: z.string().optional(),
   termsAndConditions: z.string().optional(),
   countryOfDestination: z.string().optional(),
   portOfDischarge: z.string().optional(),
   shippingMarks: z.string().optional(),
-  dueDate: z.string().optional(),
+  status: z.enum(['draft', 'sent']).optional(),
+  invoiceDate: z.string().optional().nullable(),
+  dueDate: z.string().optional().nullable(),
 });
 
 export const updateInvoiceSchema = z.object({
+  invoiceNumber: z.string().optional(),
   docType: z.enum(['commercial_invoice', 'gst_invoice', 'proforma_invoice', 'standard_invoice', 'eway_bill']).optional(),
-  currency: z.enum(['USD', 'EUR', 'GBP', 'AUD', 'INR']).optional(),
+  currency: z.enum(['USD', 'EUR', 'GBP', 'AUD', 'INR', 'CAD']).optional(),
   incoterm: z.enum(['FOB', 'CIF', 'EXW']).optional(),
+  senderDetails: z
+    .object({
+      companyName: z.string().optional(),
+      address: z.string().optional(),
+      phone: z.string().optional(),
+      phoneNumber: z.string().optional(),
+      email: z.string().optional(),
+      gstin: z.string().optional(),
+      pan: z.string().optional(),
+      iecNo: z.string().optional(),
+      stateCode: z.string().optional(),
+    })
+    .optional(),
   customerDetails: z
     .object({
       customerName: z.string().optional(),
@@ -166,12 +197,14 @@ export const updateInvoiceSchema = z.object({
   discountType: z.enum(['percent', 'amount']).optional(),
   discountValue: z.coerce.number().nonnegative().optional(),
   taxRate: z.coerce.number().min(0).max(100).optional(),
+  shippingCharges: z.coerce.number().min(0).optional(),
   items: z.array(invoiceItemInputSchema).optional(),
   status: z.enum(['draft', 'sent']).optional(),
   notes: z.string().optional(),
   termsAndConditions: z.string().optional(),
   shippingMarks: z.string().optional(),
-  dueDate: z.string().optional(),
+  invoiceDate: z.string().optional().nullable(),
+  dueDate: z.string().optional().nullable(),
 });
 
 export const recordPaymentSchema = z.object({
