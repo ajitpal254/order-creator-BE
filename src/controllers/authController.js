@@ -346,10 +346,15 @@ export const forgotPassword = async (req, res) => {
     user.resetPasswordExpires = Date.now() + 30 * 60 * 1000; // 30 mins
     await user.save();
 
+    // TODO: Replace with actual email dispatch (e.g. nodemailer) before production launch.
+    // The reset link format: ${CLIENT_URL}/reset-password?token=${resetToken}
+    if (process.env.NODE_ENV !== 'production') {
+      console.info('[Dev Only] Password reset token (never logged in production):', resetToken);
+    }
+
     return res.status(200).json({
       success: true,
-      message: 'Password reset link generated. (In production, this is emailed to the user).',
-      debugResetToken: resetToken,
+      message: 'If an account exists with that email, password reset instructions have been dispatched.',
     });
   } catch (error) {
     console.error('[Forgot Password Error]', error);

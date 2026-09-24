@@ -152,25 +152,33 @@ export const createInvoice = async (req, res) => {
       discountType,
       discountValue,
       taxRate,
-      senderStateCode: '03',
+      senderStateCode: process.env.SENDER_STATE_CODE || '03', // Punjab (H.A. Overseas HQ) — override via SENDER_STATE_CODE env var
       recipientStateCode: resolvedCustomer.stateCode || '',
     });
 
-    // Unique invoice number generation
-    let invoiceNumber = linkedOrder
-      ? generateInvoiceNumber('INV', linkedOrder.orderNumber)
-      : generateInvoiceNumber('INV');
-
-    // Check collision and adjust if duplicate
-    const existing = await Invoice.findOne({ invoiceNumber });
-    if (existing) {
-      invoiceNumber = `${invoiceNumber}-${Math.floor(100 + Math.random() * 900)}`;
+    // Unique invoice number generation with collision-safe retry loop
+    let invoiceNumber;
+    let collisionAttempts = 0;
+    const MAX_ATTEMPTS = 5;
+    while (collisionAttempts < MAX_ATTEMPTS) {
+      const candidate = linkedOrder
+        ? generateInvoiceNumber('INV', linkedOrder.orderNumber)
+        : generateInvoiceNumber('INV');
+      const exists = await Invoice.findOne({ invoiceNumber: candidate }).lean();
+      if (!exists) {
+        invoiceNumber = candidate;
+        break;
+      }
+      collisionAttempts++;
+    }
+    if (!invoiceNumber) {
+      throw new Error('Unable to generate a unique invoice number after multiple attempts. Please retry.');
     }
 
     const invoice = new Invoice({
       invoiceNumber,
       docType,
-      status: 'sent',
+      status: 'draft', // Invoices start as drafts; staff advances to 'sent' after review
       order: linkedOrder?._id || null,
       user: targetUser,
       customerDetails: resolvedCustomer,
@@ -370,7 +378,7 @@ export const updateInvoice = async (req, res) => {
         discountType: discountType || invoice.discountType,
         discountValue: discountValue !== undefined ? discountValue : invoice.discountValue,
         taxRate: taxRate !== undefined ? taxRate : invoice.taxRate,
-        senderStateCode: '03',
+        senderStateCode: process.env.SENDER_STATE_CODE || '03',
         recipientStateCode: invoice.customerDetails?.stateCode || '',
       });
 

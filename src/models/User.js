@@ -28,6 +28,12 @@ const userSchema = new mongoose.Schema(
       required: [true, 'Address is required'],
       trim: true,
     },
+    // GST/Tax registration number for domestic GST invoices
+    taxId: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     username: {
       type: String,
       required: [true, 'Username is required'],
