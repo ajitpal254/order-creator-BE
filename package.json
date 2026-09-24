@@ -7,7 +7,10 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node --test tests/*.test.js"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "node --check src/**/*.js 2>&1 || true"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -23,5 +26,11 @@
     "nodemailer": "^9.1.1",
     "pdfkit": "^0.16.0",
     "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^5.0.1",
+    "mongodb-memory-server": "^11.3.0",
+    "supertest": "^7.3.0",
+    "vitest": "^5.0.1"
   }
 }

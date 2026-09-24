@@ -1,37 +1,44 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
+/**
+ * pricing.test.js — Vitest port
+ */
+import { describe, it, expect } from 'vitest';
 import {
   getTierDiscountPercent,
   CURRENCY_RATES,
   getCarrierTrackingUrl,
 } from '../src/utils/pricing.js';
 
-test('Pricing: Distributor tier discount percentages', () => {
-  assert.equal(getTierDiscountPercent('Standard'), 0);
-  assert.equal(getTierDiscountPercent('Bronze'), 0.05);
-  assert.equal(getTierDiscountPercent('Silver'), 0.08);
-  assert.equal(getTierDiscountPercent('Gold'), 0.12);
-  assert.equal(getTierDiscountPercent('Platinum'), 0.15);
-  assert.equal(getTierDiscountPercent('Unknown'), 0);
+describe('Distributor tier discount percentages', () => {
+  it.each([
+    ['Standard', 0],
+    ['Bronze', 0.05],
+    ['Silver', 0.08],
+    ['Gold', 0.12],
+    ['Platinum', 0.15],
+    ['Unknown', 0],
+  ])('tier %s → %s discount', (tier, expected) => {
+    expect(getTierDiscountPercent(tier)).toBe(expected);
+  });
 });
 
-test('Pricing: Multi-currency conversion rates', () => {
-  assert.equal(CURRENCY_RATES.USD, 1.0);
-  assert.equal(CURRENCY_RATES.EUR, 0.92);
-  assert.equal(CURRENCY_RATES.GBP, 0.78);
-  assert.equal(CURRENCY_RATES.AUD, 1.52);
+describe('Currency conversion rates', () => {
+  it('USD is base rate 1.0', () => expect(CURRENCY_RATES.USD).toBe(1.0));
+  it('EUR is 0.92', () => expect(CURRENCY_RATES.EUR).toBe(0.92));
+  it('GBP is 0.78', () => expect(CURRENCY_RATES.GBP).toBe(0.78));
+  it('AUD is 1.52', () => expect(CURRENCY_RATES.AUD).toBe(1.52));
 });
 
-test('Pricing: Carrier tracking URL generation', () => {
-  const dhlUrl = getCarrierTrackingUrl('DHL Express', '987654321');
-  assert.match(dhlUrl, /dhl\.com\/en\/express\/tracking\.html\?AWB=987654321/);
-
-  const fedexUrl = getCarrierTrackingUrl('FedEx Cargo', '74839201');
-  assert.match(fedexUrl, /fedex\.com\/fedextrack\/\?trknbr=74839201/);
-
-  const maerskUrl = getCarrierTrackingUrl('Maersk Ocean', 'MSK123456');
-  assert.match(maerskUrl, /maersk\.com\/tracking\/MSK123456/);
-
-  const emptyUrl = getCarrierTrackingUrl('DHL', '');
-  assert.equal(emptyUrl, null);
+describe('Carrier tracking URL generation', () => {
+  it('generates DHL tracking URL', () => {
+    expect(getCarrierTrackingUrl('DHL Express', '987654321')).toMatch(/dhl\.com\/en\/express\/tracking\.html\?AWB=987654321/);
+  });
+  it('generates FedEx tracking URL', () => {
+    expect(getCarrierTrackingUrl('FedEx Cargo', '74839201')).toMatch(/fedex\.com\/fedextrack\/\?trknbr=74839201/);
+  });
+  it('generates Maersk tracking URL', () => {
+    expect(getCarrierTrackingUrl('Maersk Ocean', 'MSK123456')).toMatch(/maersk\.com\/tracking\/MSK123456/);
+  });
+  it('returns null when tracking number is empty', () => {
+    expect(getCarrierTrackingUrl('DHL', '')).toBeNull();
+  });
 });

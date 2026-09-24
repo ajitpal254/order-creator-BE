@@ -494,6 +494,10 @@ export const voidInvoice = async (req, res) => {
       return res.status(400).json({ success: false, message: 'A reason (min 3 chars) is required to void an invoice' });
     }
 
+    if (invoice.status === 'void') {
+      return res.status(400).json({ success: false, message: `Invoice #${invoice.invoiceNumber} is already void.` });
+    }
+
     invoice.status = 'void';
     invoice.voidReason = reason.trim();
     invoice.voidedAt = new Date();

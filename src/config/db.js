@@ -4,7 +4,7 @@ dotenv.config();
 
 export const connectDB = async () => {
   try {
-    const connUri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/ha_overseas_order_creator';
+    const connUri = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/ha_overseas_order_creator';
     mongoose.set('strictQuery', false);
     const conn = await mongoose.connect(connUri, {
       serverSelectionTimeoutMS: 8000,

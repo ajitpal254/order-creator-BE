@@ -127,13 +127,11 @@ const invoiceSchema = new mongoose.Schema(
       type: String,
       enum: ['draft', 'sent', 'paid', 'partial', 'overdue', 'void'],
       default: 'draft',
-      index: true,
     },
     order: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Order',
       default: null,
-      index: true,
     },
     user: {
       type: mongoose.Schema.Types.ObjectId,

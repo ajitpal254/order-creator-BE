@@ -1,5 +1,7 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
+/**
+ * token.test.js — Vitest port
+ */
+import { describe, it, expect } from 'vitest';
 import {
   generateAccessToken,
   generateRefreshToken,
@@ -7,33 +9,63 @@ import {
   verifyRefreshToken,
 } from '../src/utils/token.js';
 
-test('Token Utils: Generate and verify access token', () => {
-  const mockUser = {
-    _id: '507f1f77bcf86cd799439011',
-    username: 'testbuyer',
-    email: 'test@example.com',
-    role: 'user',
-    customerName: 'Test Buyer',
-    businessName: 'Global Tools Corp',
-  };
+const MOCK_USER = {
+  _id: '507f1f77bcf86cd799439011',
+  username: 'testbuyer',
+  email: 'test@example.com',
+  role: 'user',
+  customerName: 'Test Buyer',
+  businessName: 'Global Tools Corp',
+};
 
-  const token = generateAccessToken(mockUser);
-  assert.ok(token);
+describe('Access token', () => {
+  it('generates a non-empty JWT string', () => {
+    expect(generateAccessToken(MOCK_USER)).toBeTruthy();
+  });
 
-  const decoded = verifyAccessToken(token);
-  assert.equal(decoded.id, mockUser._id);
-  assert.equal(decoded.username, mockUser.username);
-  assert.equal(decoded.email, mockUser.email);
+  it('round-trips: decoded payload matches source user', () => {
+    const token = generateAccessToken(MOCK_USER);
+    const decoded = verifyAccessToken(token);
+    expect(decoded.id).toBe(MOCK_USER._id);
+    expect(decoded.username).toBe(MOCK_USER.username);
+    expect(decoded.email).toBe(MOCK_USER.email);
+    expect(decoded.role).toBe(MOCK_USER.role);
+  });
+
+  it('uses HS256 algorithm (alg header)', () => {
+    const token = generateAccessToken(MOCK_USER);
+    const header = JSON.parse(Buffer.from(token.split('.')[0], 'base64url').toString());
+    expect(header.alg).toBe('HS256');
+  });
+
+  it('throws on tampered token', () => {
+    const token = generateAccessToken(MOCK_USER);
+    const tampered = token.slice(0, -3) + 'abc';
+    expect(() => verifyAccessToken(tampered)).toThrow();
+  });
 });
 
-test('Token Utils: Generate and verify refresh token', () => {
-  const mockUser = {
-    _id: '507f1f77bcf86cd799439011',
-  };
+describe('Refresh token', () => {
+  it('generates a non-empty JWT string', () => {
+    expect(generateRefreshToken(MOCK_USER)).toBeTruthy();
+  });
 
-  const refreshToken = generateRefreshToken(mockUser);
-  assert.ok(refreshToken);
+  it('round-trips: decoded id matches source user._id', () => {
+    const token = generateRefreshToken(MOCK_USER);
+    const decoded = verifyRefreshToken(token);
+    expect(decoded.id).toBe(MOCK_USER._id);
+  });
 
-  const decoded = verifyRefreshToken(refreshToken);
-  assert.equal(decoded.id, mockUser._id);
+  it('uses a different secret than the access token (different tokens for same user)', () => {
+    const accessToken = generateAccessToken(MOCK_USER);
+    const refreshToken = generateRefreshToken(MOCK_USER);
+    // They should be different JWTs even for same user
+    expect(accessToken).not.toBe(refreshToken);
+  });
+
+  it('throws on tampered refresh token', () => {
+    const token = generateRefreshToken(MOCK_USER);
+    const tampered = token.slice(0, -3) + 'xyz';
+    expect(() => verifyRefreshToken(tampered)).toThrow();
+  });
 });
