@@ -43,7 +43,10 @@ app.use(
   })
 );
 
-const clientUrl = process.env.CLIENT_URL ? process.env.CLIENT_URL.trim().replace(/\/$/, '') : 'http://localhost:5173';
+const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
+  .split(',')
+  .map((url) => url.trim().replace(/\/$/, ''))
+  .filter(Boolean);
 
 app.use(
   cors({
@@ -58,8 +61,8 @@ app.use(
         }
       }
 
-      // Check strictly against configured CLIENT_URL
-      if (origin === clientUrl) {
+      // Check strictly against configured CLIENT_URL list
+      if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
 
