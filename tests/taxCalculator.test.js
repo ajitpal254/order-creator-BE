@@ -111,6 +111,42 @@ describe('calculateInvoiceTotals — Commercial Export Invoice', () => {
   });
 });
 
+describe('calculateInvoiceTotals — Standard Invoice (Ontario 13% HST)', () => {
+  const invoiceData = {
+    docType: 'standard_invoice',
+    taxRate: 13,
+    currency: 'USD',
+    items: [
+      {
+        productName: 'BMO Project (September 1- September 30, 2026)',
+        quantity: 128,
+        unit: 'HRS',
+        unitPrice: 38.0,
+      },
+    ],
+  };
+
+  it('calculates subtotal as quantity * price', () => {
+    const r = calculateInvoiceTotals(invoiceData);
+    expect(r.subtotal).toBe(4864.0);
+  });
+
+  it('calculates 13% tax as 632.32', () => {
+    const r = calculateInvoiceTotals(invoiceData);
+    expect(r.taxAmount).toBe(632.32);
+  });
+
+  it('calculates grand total as 5496.32', () => {
+    const r = calculateInvoiceTotals(invoiceData);
+    expect(r.grandTotal).toBe(5496.32);
+  });
+
+  it('keeps lineTotal as net before tax in items table', () => {
+    const r = calculateInvoiceTotals(invoiceData);
+    expect(r.items[0].lineTotal).toBe(4864.0);
+  });
+});
+
 describe('calculateInvoiceTotals — Edge Cases', () => {
   it('handles empty items array gracefully', () => {
     const r = calculateInvoiceTotals({ items: [], docType: 'commercial_invoice', currency: 'USD' });

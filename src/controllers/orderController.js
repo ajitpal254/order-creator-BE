@@ -495,7 +495,7 @@ const ensureOrderInvoice = async (order) => {
 
   const calculation = calculateInvoiceTotals({
     items: itemsToProcess,
-    docType: 'commercial_invoice',
+    docType: 'standard_invoice',
     currency: order.currency || 'USD',
     discountType: 'amount',
     discountValue: order.discountAmount || 0,
@@ -507,7 +507,7 @@ const ensureOrderInvoice = async (order) => {
   const invoiceNumber = `INV-${order.orderNumber}`;
   const invoice = new Invoice({
     invoiceNumber,
-    docType: 'commercial_invoice',
+    docType: 'standard_invoice',
     status: 'sent',
     order: order._id,
     user: order.user,

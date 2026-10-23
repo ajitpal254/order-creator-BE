@@ -1,4 +1,5 @@
 FROM node:20-alpine
+RUN apk add --no-cache bash git curl
 WORKDIR /app
 COPY package*.json ./
 RUN npm install

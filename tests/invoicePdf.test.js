@@ -67,6 +67,43 @@ describe('generateCommercialInvoicePdf — standard invoice', () => {
     expect(buffer.length).toBeGreaterThan(1000);
     expect(buffer.subarray(0, 4).toString()).toBe('%PDF');
   });
+
+  it('handles standard invoice matching Ouvra Billing reference layout without throwing', async () => {
+    const standardInvoice = {
+      invoiceNumber: 'INV-0008',
+      docType: 'standard_invoice',
+      currency: 'USD',
+      invoiceDate: new Date('2026-09-23'),
+      senderDetails: {
+        companyName: '16931359 CANADA INC.',
+        gstin: '7026923229RT0001',
+        address: 'Ottawa,ON,Canada',
+      },
+      customerDetails: {
+        customerName: 'Mesons Technologies INC.',
+        businessName: 'Mesons Technologies INC.',
+        address: '1939 Kennedy Rd Unit# 204,\nToronto, Ontario, CANADA, M1P 2L9',
+      },
+      items: [
+        {
+          productName: 'BMO Project (September 1- September 30, 2026)',
+          quantity: 128,
+          unit: 'HRS',
+          unitPrice: 38.0,
+          lineTotal: 4864.0,
+        },
+      ],
+      subtotal: 4864.0,
+      taxRate: 13,
+      taxAmount: 632.32,
+      grandTotal: 5496.32,
+      notes: 'Payment is due within 30 days of invoice date.',
+      paymentInstructions: 'Please pay to the account ending in 9363',
+    };
+    const buffer = await generateCommercialInvoicePdf(standardInvoice);
+    expect(buffer).toBeTruthy();
+    expect(buffer.subarray(0, 4).toString()).toBe('%PDF');
+  });
 });
 
 describe('generateCommercialInvoicePdf — edge cases (Phase 5 required)', () => {

@@ -10,7 +10,7 @@ export function roundToTwoDecimals(val) {
 
 export function calculateInvoiceTotals(invoiceData) {
   const items = Array.isArray(invoiceData.items) ? invoiceData.items : [];
-  const docType = invoiceData.docType || 'commercial_invoice';
+  const docType = invoiceData.docType || 'standard_invoice';
   const defaultTaxRate = Number(invoiceData.taxRate) >= 0 ? Number(invoiceData.taxRate) : 0;
   const discountType = invoiceData.discountType || 'amount';
   const discountValue = Number(invoiceData.discountValue) > 0 ? Number(invoiceData.discountValue) : 0;
@@ -34,7 +34,7 @@ export function calculateInvoiceTotals(invoiceData) {
       : defaultTaxRate;
 
     const lineTax = roundToTwoDecimals(lineNet * (itemTaxRate / 100));
-    const lineTotal = roundToTwoDecimals(lineNet + (docType === 'gst_invoice' || docType === 'standard_invoice' ? lineTax : 0));
+    const lineTotal = roundToTwoDecimals(lineNet + (docType === 'gst_invoice' ? lineTax : 0));
 
     totalQty += quantity;
     subtotal += lineNet;

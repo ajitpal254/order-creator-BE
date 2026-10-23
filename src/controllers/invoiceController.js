@@ -33,7 +33,7 @@ export const createInvoice = async (req, res) => {
     const {
       orderId,
       invoiceNumber: customInvoiceNumber,
-      docType = 'commercial_invoice',
+      docType = 'standard_invoice',
       currency,
       incoterm,
       customerDetails: customCustomer,
@@ -196,7 +196,7 @@ export const createInvoice = async (req, res) => {
     const invoice = new Invoice({
       invoiceNumber,
       docType,
-      status: req.body.status && ['draft', 'sent'].includes(req.body.status) ? req.body.status : 'sent', // Default to sent/active
+      status: req.body.status && ['draft', 'sent'].includes(req.body.status) ? req.body.status : (linkedOrder ? 'draft' : 'sent'),
       order: linkedOrder?._id || null,
       user: targetUser,
       customerDetails: resolvedCustomer,

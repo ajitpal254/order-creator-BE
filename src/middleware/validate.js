@@ -118,10 +118,11 @@ export const invoiceItemInputSchema = z.object({
 export const createInvoiceSchema = z.object({
   orderId: z.string().optional().nullable(),
   invoiceNumber: z.string().optional().nullable(),
+  invoiceTitle: z.string().optional().nullable(),
   docType: z
     .enum(['commercial_invoice', 'gst_invoice', 'proforma_invoice', 'standard_invoice', 'eway_bill'])
     .optional()
-    .default('commercial_invoice'),
+    .default('standard_invoice'),
   currency: z.enum(['USD', 'EUR', 'GBP', 'AUD', 'INR', 'CAD']).optional().default('USD'),
   incoterm: z.enum(['FOB', 'CIF', 'EXW']).optional().default('FOB'),
   customerDetails: z
@@ -166,6 +167,7 @@ export const createInvoiceSchema = z.object({
 
 export const updateInvoiceSchema = z.object({
   invoiceNumber: z.string().optional(),
+  invoiceTitle: z.string().optional().nullable(),
   docType: z.enum(['commercial_invoice', 'gst_invoice', 'proforma_invoice', 'standard_invoice', 'eway_bill']).optional(),
   currency: z.enum(['USD', 'EUR', 'GBP', 'AUD', 'INR', 'CAD']).optional(),
   incoterm: z.enum(['FOB', 'CIF', 'EXW']).optional(),

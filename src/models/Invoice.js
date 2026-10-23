@@ -117,10 +117,15 @@ const invoiceSchema = new mongoose.Schema(
       trim: true,
       index: true,
     },
+    invoiceTitle: {
+      type: String,
+      default: 'INVOICE',
+      trim: true,
+    },
     docType: {
       type: String,
       enum: ['commercial_invoice', 'gst_invoice', 'proforma_invoice', 'standard_invoice', 'eway_bill'],
-      default: 'commercial_invoice',
+      default: 'standard_invoice',
       index: true,
     },
     status: {
@@ -150,11 +155,11 @@ const invoiceSchema = new mongoose.Schema(
       stateCode: { type: String, default: '' },
     },
     senderDetails: {
-      companyName: { type: String, default: () => process.env.SENDER_COMPANY_NAME || 'H.A. OVERSEAS' },
-      address: { type: String, default: () => process.env.SENDER_ADDRESS || 'Industrial Area Phase-II, Ludhiana, Punjab - 141003, India' },
-      phoneNumber: { type: String, default: () => process.env.SENDER_PHONE || '+91-99884-65800' },
-      email: { type: String, default: () => process.env.SENDER_EMAIL || 'haoverseas1313@gmail.com' },
-      gstin: { type: String, default: () => process.env.SENDER_GSTIN || '03AAAAA0000A1Z5' },
+      companyName: { type: String, default: () => process.env.SENDER_COMPANY_NAME || '16931359 CANADA INC.' },
+      address: { type: String, default: () => process.env.SENDER_ADDRESS || 'Ottawa, ON, Canada' },
+      phoneNumber: { type: String, default: () => process.env.SENDER_PHONE || '+1-587-891-6111' },
+      email: { type: String, default: () => process.env.SENDER_EMAIL || 'ajitpal353@gmail.com' },
+      gstin: { type: String, default: () => process.env.SENDER_GSTIN || '7026923229RT0001' },
       iecNo: { type: String, default: () => process.env.SENDER_IEC_NO || '0300000000' },
       pan: { type: String, default: () => process.env.SENDER_PAN || 'AAAAA0000A' },
       stateCode: { type: String, default: () => process.env.SENDER_STATE_CODE || '03' },
