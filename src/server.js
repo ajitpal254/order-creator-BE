@@ -48,6 +48,15 @@ const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
   .map((url) => url.trim().replace(/\/$/, ''))
   .filter(Boolean);
 
+// Log the allowlist at boot: a wrong CLIENT_URL is the usual cause of a
+// deployed CORS error, and the browser never shows the server-side reason.
+logger.info(`CORS allowed origins: ${allowedOrigins.join(', ') || '(none)'}`);
+if (process.env.NODE_ENV === 'production' && allowedOrigins.some((o) => o.includes('localhost'))) {
+  logger.warn(
+    'CLIENT_URL contains a localhost origin in production — the deployed frontend will be rejected by CORS. Set CLIENT_URL (Render dashboard) to the exact deployed frontend origin.'
+  );
+}
+
 app.use(
   cors({
     origin: (origin, callback) => {
