@@ -1,12 +1,17 @@
 import { User } from '../models/User.js';
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../utils/token.js';
+import { sendPasswordResetEmail } from '../utils/emailService.js';
 import crypto from 'crypto';
 
 const REFRESH_COOKIE_NAME = 'hao_refresh_token';
+// The refresh cookie must travel cross-site in production (frontend on
+// Netlify, API on Render), so it needs SameSite=None there. Strict would
+// mean the browser never sends it back and refresh silently stops working.
+// None requires Secure, which is already on in production.
 const COOKIE_OPTIONS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
-  sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
 };
 
@@ -346,10 +351,18 @@ export const forgotPassword = async (req, res) => {
     user.resetPasswordExpires = Date.now() + 30 * 60 * 1000; // 30 mins
     await user.save();
 
-    // TODO: Replace with actual email dispatch (e.g. nodemailer) before production launch.
-    // The reset link format: ${CLIENT_URL}/reset-password?token=${resetToken}
-    if (process.env.NODE_ENV !== 'production') {
-      console.info('[Dev Only] Password reset token (never logged in production):', resetToken);
+    // Send the reset link by email. The response stays generic either way
+    // so it never reveals whether the account exists. Email delivery needs
+    // SMTP_HOST/SMTP_USER/SMTP_PASS configured; without them the mailer
+    // logs a simulated send instead of failing the request.
+    const frontendOrigin = (process.env.CLIENT_URL || 'http://localhost:5173')
+      .split(',')
+      .map((url) => url.trim().replace(/\/$/, ''))
+      .filter(Boolean)[0];
+    const resetUrl = `${frontendOrigin}/reset-password?token=${resetToken}`;
+    const emailResult = await sendPasswordResetEmail({ to: user.email, resetUrl });
+    if (!emailResult?.success) {
+      console.error('[Forgot Password] Reset email failed to send', { email: user.email });
     }
 
     return res.status(200).json({

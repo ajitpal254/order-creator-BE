@@ -161,3 +161,33 @@ export const sendStatusUpdateEmail = async ({ order, user, newStatus, note }) =>
     text: `Your order #${order.orderNumber} status has changed to: ${newStatus}. ${note || ''}`,
   });
 };
+
+/**
+ * Send password-reset email with a time-limited reset link.
+ * Uses the same transporter as the order emails: real SMTP when
+ * SMTP_HOST/SMTP_USER are configured, simulated (logged) otherwise.
+ */
+export const sendPasswordResetEmail = async ({ to, resetUrl }) => {
+  const subject = 'Reset your H.A. Overseas password';
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+      <div style="background-color: #0f172a; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+        <h2 style="color: #f59e0b; margin: 0;">H.A. OVERSEAS</h2>
+      </div>
+      <div style="padding: 24px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 8px 8px;">
+        <h3>Password Reset Requested</h3>
+        <p>We received a request to reset the password for this email address.</p>
+        <p><a href="${resetUrl}" style="background: #f59e0b; color: #000; padding: 10px 16px; text-decoration: none; border-radius: 4px; font-weight: bold; display: inline-block;">Reset Password</a></p>
+        <p style="font-size: 0.85rem; color: #64748b;">This link expires in 30 minutes. If you did not request a reset, you can ignore this email.</p>
+        <p style="font-size: 0.85rem; color: #64748b;">If the button does not work, copy this link into your browser:<br/>${resetUrl}</p>
+      </div>
+    </div>
+  `;
+
+  return sendMail({
+    to,
+    subject,
+    html,
+    text: `Reset your H.A. Overseas password using this link (expires in 30 minutes): ${resetUrl}`,
+  });
+};
