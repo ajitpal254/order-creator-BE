@@ -288,6 +288,9 @@ export const acceptQuote = async (req, res) => {
           title: `Quote #${order.orderNumber} accepted`,
           body: `You accepted quote #${order.orderNumber}. Our export desk will convert it into a binding order.`,
           link: '/my-orders',
+          // FEAT-11 (v0.8): WhatsApp fan-out handled inside notify();
+          // the quote_ready_v1 template carries the acceptance fact.
+          whatsapp: { template: 'quote_ready_v1', parameters: [order.orderNumber, 'Accepted'] },
         }),
       'notify quote accepted'
     );

@@ -19,6 +19,7 @@ import {
 } from '../utils/totp.js';
 import { logAudit } from '../utils/audit.js';
 import { sendPasswordResetEmail } from '../utils/emailService.js';
+import { isValidPhone, normalizePhone } from '../services/messaging.js';
 import crypto from 'crypto';
 
 const REFRESH_COOKIE_NAME = 'hao_refresh_token';
@@ -682,7 +683,8 @@ export const getMe = async (req, res) => {
 // @route PUT /api/auth/profile
 export const updateProfile = async (req, res) => {
   try {
-    const { customerName, businessName, country, phoneNumber, address } = req.body;
+    const { customerName, businessName, country, phoneNumber, address, phone, notifications } =
+      req.body;
     const user = await User.findById(req.user._id);
 
     if (!user) {
@@ -695,6 +697,30 @@ export const updateProfile = async (req, res) => {
     if (phoneNumber) user.phoneNumber = phoneNumber.trim();
     if (address) user.address = address.trim();
 
+    // FEAT-11 (v0.8): WhatsApp phone + opt-in. The phone must be
+    // E.164-ish (leading +, 8–15 digits); an empty string clears it.
+    // Invalid values are rejected with 400 before anything is saved.
+    if (phone !== undefined) {
+      if (phone === null || phone === '') {
+        user.phone = '';
+      } else if (!isValidPhone(phone)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid phone number. Use international format: + followed by 8–15 digits.',
+        });
+      } else {
+        user.phone = normalizePhone(phone);
+      }
+    }
+    if (notifications && typeof notifications === 'object') {
+      if (notifications.whatsapp !== undefined) {
+        user.notifications.whatsapp = Boolean(notifications.whatsapp);
+      }
+      if (notifications.email !== undefined) {
+        user.notifications.email = Boolean(notifications.email);
+      }
+    }
+
     await user.save();
 
     return res.status(200).json({
@@ -706,6 +732,11 @@ export const updateProfile = async (req, res) => {
         businessName: user.businessName,
         country: user.country,
         phoneNumber: user.phoneNumber,
+        phone: user.phone,
+        notifications: {
+          email: user.notifications?.email,
+          whatsapp: user.notifications?.whatsapp,
+        },
         address: user.address,
         username: user.username,
         email: user.email,
