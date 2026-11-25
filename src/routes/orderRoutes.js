@@ -11,6 +11,7 @@ import {
   convertQuoteToOrder,
   getBuyerAnalytics,
   retryInvoiceSync,
+  reorderOrder,
 } from '../controllers/orderController.js';
 import {
   createCounterOffer,
@@ -69,6 +70,8 @@ router.post(
   authorizeRoles(...staffRoles),
   retryInvoiceSync
 );
+// FEAT-05 (v0.5): reorder — owner (or staff) copies an order into a new Draft
+router.post('/:id/reorder', protect, reorderOrder);
 
 // FEAT-02 (v0.5) quote workflow
 router.post(
