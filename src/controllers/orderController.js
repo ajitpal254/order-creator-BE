@@ -15,6 +15,19 @@ import {
   sendStatusUpdateEmail,
 } from '../utils/emailService.js';
 import { calculateInvoiceTotals } from '../utils/taxCalculator.js';
+import { createSearchRegex } from '../utils/escapeRegExp.js';
+
+// Staff roles (mirrors STAFF_ROLES in invoiceController.js / staffRoles in routes):
+// holders of these roles act on any user's orders; everyone else ('user'/'buyer')
+// may only act on their own.
+const STAFF_ROLES = [
+  'admin',
+  'sales_manager',
+  'production_supervisor',
+  'qc_inspector',
+  'shipping_officer',
+  'super_admin',
+];
 
 
 // Helper to generate sequential-style Order Number
@@ -349,7 +362,7 @@ export const getOrderById = async (req, res) => {
 
     const orderUserId = order.user?._id ? order.user._id.toString() : order.user?.toString();
     const reqUserId = req.user?._id?.toString();
-    const isStaff = ['admin', 'sales_manager', 'production_supervisor', 'qc_inspector', 'shipping_officer', 'super_admin'].includes(req.user.role);
+    const isStaff = STAFF_ROLES.includes(req.user.role);
 
     if (orderUserId !== reqUserId && !isStaff) {
       return res.status(403).json({ success: false, message: 'Not authorized to view this order' });
@@ -383,7 +396,7 @@ export const getAllOrders = async (req, res) => {
     }
 
     if (search) {
-      const searchRegex = new RegExp(search.trim(), 'i');
+      const searchRegex = createSearchRegex(search);
       filter.$or = [
         { orderNumber: searchRegex },
         { 'customerDetails.customerName': searchRegex },
@@ -393,11 +406,27 @@ export const getAllOrders = async (req, res) => {
       ];
     }
 
-    const orders = await Order.find(filter)
-      .sort({ createdAt: -1 })
-      .populate('user', 'username email customerName businessName distributorTier');
+    const pageNum = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 100));
+    const skip = (pageNum - 1) * limitNum;
 
-    return res.status(200).json({ success: true, count: orders.length, data: orders });
+    const [orders, total] = await Promise.all([
+      Order.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .populate('user', 'username email customerName businessName distributorTier'),
+      Order.countDocuments(filter),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      count: orders.length,
+      total,
+      page: pageNum,
+      limit: limitNum,
+      data: orders,
+    });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
@@ -411,6 +440,14 @@ export const updateOrderStatus = async (req, res) => {
     const order = await Order.findById(req.params.id);
 
     if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    // SEC-01: ownership check BEFORE state-transition validation. Non-staff
+    // users may only transition their own orders; another user's order is
+    // reported as 404 (not 403) so order IDs cannot be probed.
+    const isStaff = STAFF_ROLES.includes(req.user.role);
+    if (!isStaff && order.user.toString() !== req.user._id.toString()) {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
@@ -620,7 +657,7 @@ export const downloadOrderPdf = async (req, res) => {
 
     const orderUserId = order.user?._id ? order.user._id.toString() : order.user?.toString();
     const reqUserId = req.user?._id?.toString();
-    const isStaff = ['admin', 'sales_manager', 'production_supervisor', 'qc_inspector', 'shipping_officer', 'super_admin'].includes(req.user.role);
+    const isStaff = STAFF_ROLES.includes(req.user.role);
 
     if (orderUserId !== reqUserId && !isStaff) {
       return res.status(403).json({ success: false, message: 'Not authorized to download this order PDF' });

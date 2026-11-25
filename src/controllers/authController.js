@@ -129,7 +129,7 @@ export const login = async (req, res) => {
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials. User not found.',
+        message: 'Invalid email or password',
       });
     }
 
@@ -144,7 +144,7 @@ export const login = async (req, res) => {
     if (!isMatch) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials. Incorrect password.',
+        message: 'Invalid email or password',
       });
     }
 
@@ -252,43 +252,64 @@ export const logout = async (req, res) => {
 // @route POST /api/auth/google
 export const googleAuth = async (req, res) => {
   try {
-    const { idToken, email: rawEmail, customerName: rawCustomerName, firebaseUid: rawUid } = req.body;
+    const { idToken } = req.body;
 
-    let email = rawEmail;
-    let customerName = rawCustomerName;
-    let firebaseUid = rawUid;
+    // Identity is derived ONLY from the verified token response below.
+    // Email, name and uid supplied in the request body are never trusted,
+    // in any environment.
+    if (!idToken) {
+      return res.status(401).json({
+        success: false,
+        message: 'Google ID token is required for authentication.',
+      });
+    }
+
+    let email;
+    let customerName;
+    let firebaseUid;
 
     // Cryptographic server-side verification of Google/Firebase ID token
-    if (idToken) {
-      try {
-        const verifyRes = await fetch(
-          `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`
-        );
-        if (!verifyRes.ok) {
-          return res.status(401).json({
-            success: false,
-            message: 'Invalid or expired Google authentication token.',
-          });
-        }
-        const tokenData = await verifyRes.json();
-        email = tokenData.email;
-        firebaseUid = tokenData.sub;
-        customerName = tokenData.name || customerName;
-      } catch (err) {
+    try {
+      const verifyRes = await fetch(
+        `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`
+      );
+      if (!verifyRes.ok) {
         return res.status(401).json({
           success: false,
-          message: 'Failed to verify Google identity: ' + err.message,
+          message: 'Invalid or expired Google authentication token.',
         });
       }
-    } else if (process.env.NODE_ENV === 'production') {
-      return res.status(400).json({
+      const tokenData = await verifyRes.json();
+
+      // The token must have been issued for this project.
+      if (!process.env.FIREBASE_PROJECT_ID || tokenData.aud !== process.env.FIREBASE_PROJECT_ID) {
+        return res.status(401).json({
+          success: false,
+          message: 'Google authentication token was not issued for this application.',
+        });
+      }
+
+      // tokeninfo returns string values, so accept both "true" and true.
+      const emailVerified = tokenData.email_verified === true || tokenData.email_verified === 'true';
+      if (!emailVerified) {
+        return res.status(401).json({
+          success: false,
+          message: 'Google account email is not verified.',
+        });
+      }
+
+      email = tokenData.email;
+      firebaseUid = tokenData.sub;
+      customerName = tokenData.name;
+    } catch (err) {
+      return res.status(401).json({
         success: false,
-        message: 'Google ID token is required for secure authentication in production.',
+        message: 'Failed to verify Google identity: ' + err.message,
       });
     }
 
     if (!email) {
-      return res.status(400).json({
+      return res.status(401).json({
         success: false,
         message: 'Email is required for Google Sign-In.',
       });
@@ -380,8 +401,8 @@ export const forgotPassword = async (req, res) => {
 export const resetPassword = async (req, res) => {
   try {
     const { token, newPassword } = req.body;
-    if (!token || !newPassword || newPassword.length < 6) {
-      return res.status(400).json({ success: false, message: 'Valid token and new password (min 6 chars) are required.' });
+    if (!token || !newPassword || newPassword.length < 10) {
+      return res.status(400).json({ success: false, message: 'Valid token and new password (min 10 chars) are required.' });
     }
 
     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');

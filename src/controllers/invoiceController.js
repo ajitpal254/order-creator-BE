@@ -4,6 +4,7 @@ import { Product } from '../models/Product.js';
 import { calculateInvoiceTotals, roundToTwoDecimals } from '../utils/taxCalculator.js';
 import { generateCommercialInvoicePdf } from '../utils/pdfGenerator.js';
 import { logger } from '../utils/logger.js';
+import { createSearchRegex } from '../utils/escapeRegExp.js';
 
 const STAFF_ROLES = [
   'admin',
@@ -284,7 +285,7 @@ export const getInvoices = async (req, res) => {
     }
 
     if (search) {
-      const searchRegex = new RegExp(search.trim(), 'i');
+      const searchRegex = createSearchRegex(search);
       filter.$or = [
         { invoiceNumber: searchRegex },
         { 'customerDetails.customerName': searchRegex },
