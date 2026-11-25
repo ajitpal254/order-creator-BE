@@ -104,4 +104,9 @@ userSchema.methods.comparePassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
+// QOL-07: the admin user list (routes/userRoutes.js) filters by role
+// and sorts by createdAt desc. email and username already carry unique
+// indexes (login / Google sign-in look users up by email).
+userSchema.index({ role: 1, createdAt: -1 });
+
 export const User = mongoose.model('User', userSchema);

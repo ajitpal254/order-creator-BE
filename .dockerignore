@@ -1,0 +1,9 @@
+node_modules
+.git
+.github
+tests
+postman
+uploads/*
+!uploads/.gitkeep
+.env
+*.md
