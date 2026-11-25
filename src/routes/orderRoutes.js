@@ -21,6 +21,14 @@ import {
   declineQuote,
   downloadQuotePdf,
 } from '../controllers/quoteController.js';
+import {
+  generateOrderDocument,
+  listOrderDocuments,
+  downloadOrderDocument,
+  uploadOrderDocument,
+  deleteOrderDocument,
+} from '../controllers/orderDocumentController.js';
+import { uploadProof } from '../middleware/proofUpload.js';
 import { protect, authorizeRoles } from '../middleware/auth.js';
 import {
   validate,
@@ -104,5 +112,21 @@ router.post(
   declineQuote
 );
 router.get('/:id/quote-pdf', protect, downloadQuotePdf);
+
+// FEAT-08 (v0.8): order document vault — export/shipping documents.
+// Access follows the standard order rule (owner or staff; another buyer
+// gets 404). Uploads reuse the hardened sniffing upload middleware
+// (shared with payment proofs: PDF + JPEG/PNG/WebP, stored via the
+// storage service). Delete is staff-only.
+router.post('/:id/documents/generate', protect, generateOrderDocument);
+router.get('/:id/documents', protect, listOrderDocuments);
+router.get('/:id/documents/:docId/download', protect, downloadOrderDocument);
+router.post('/:id/documents/upload', protect, uploadProof.single('file'), uploadOrderDocument);
+router.delete(
+  '/:id/documents/:docId',
+  protect,
+  authorizeRoles(...staffRoles),
+  deleteOrderDocument
+);
 
 export default router;
