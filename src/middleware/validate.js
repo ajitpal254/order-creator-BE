@@ -85,6 +85,25 @@ export const updateOrderStatusSchema = z.object({
   carrierName: z.string().optional(),
 });
 
+// FEAT-02 (v0.5) quote workflow schemas
+export const counterOfferSchema = z.object({
+  amount: z.coerce.number().positive('Counter-offer amount must be greater than zero'),
+  message: z.string().max(1000).optional().default(''),
+});
+
+export const respondCounterOfferSchema = z.object({
+  // Chosen contract: { accept: boolean } (not an action string).
+  accept: z.boolean(),
+  validityDays: z.coerce.number().int().positive().max(365).optional(),
+  quoteValidityDate: z.string().datetime().optional(),
+});
+
+export const acceptQuoteSchema = z.object({});
+
+export const declineQuoteSchema = z.object({
+  reason: z.string().max(1000).optional().default(''),
+});
+
 export const signupSchema = z.object({
   customerName: z.string().min(2, 'Customer name must be at least 2 characters'),
   businessName: z.string().min(2, 'Business name must be at least 2 characters'),

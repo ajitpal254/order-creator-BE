@@ -132,6 +132,59 @@ export const paymentReceivedTemplate = (payload = {}) => {
   return { subject, text, html };
 };
 
+// FEAT-02 (v0.5) quote-workflow templates. Payload extras:
+// counterAmount / offeredAmount, message, reason, quoteVersion.
+export const counterOfferReceivedTemplate = (payload = {}) => {
+  const offered = money(payload.counterAmount ?? payload.offeredAmount, payload.currency);
+  const subject = `Counter-Offer Received for Quote #${payload.orderNumber} - H.A. Overseas`;
+  const html = wrap(
+    'Counter-offer received',
+    `${greeting(payload)}
+     ${orderLine(payload)}
+     <p>A counter-offer${offered ? ` of <strong>${esc(offered)}</strong>` : ''} has been recorded for this quote.${payload.message ? ` Message: <em>${esc(payload.message)}</em>` : ''} Our export desk will review it and respond.</p>`
+  );
+  const text = `A counter-offer${offered ? ` of ${offered}` : ''} has been recorded for quote #${payload.orderNumber}.${payload.message ? ` Message: ${payload.message}` : ''}`;
+  return { subject, text, html };
+};
+
+export const counterOfferRespondedTemplate = (payload = {}) => {
+  const accepted = payload.offerAccepted === true || payload.action === 'accept';
+  const offered = money(payload.counterAmount ?? payload.offeredAmount, payload.currency);
+  const subject = `Counter-Offer ${accepted ? 'Accepted' : 'Declined'} for Quote #${payload.orderNumber} - H.A. Overseas`;
+  const html = wrap(
+    accepted ? 'Your counter-offer was accepted' : 'Your counter-offer was declined',
+    `${greeting(payload)}
+     ${orderLine(payload)}
+     <p>Your counter-offer${offered ? ` of <strong>${esc(offered)}</strong>` : ''} for quote <strong>#${esc(payload.orderNumber)}</strong> has been ${accepted ? 'accepted — the quoted total has been revised' : 'declined'}. ${accepted ? 'A revised quote is ready for your review.' : 'The current quoted total remains unchanged.'}</p>`
+  );
+  const text = `Your counter-offer${offered ? ` of ${offered}` : ''} for quote #${payload.orderNumber} has been ${accepted ? 'accepted; the quoted total has been revised' : 'declined'}.`;
+  return { subject, text, html };
+};
+
+export const quoteAcceptedTemplate = (payload = {}) => {
+  const subject = `Quote Accepted #${payload.orderNumber} - H.A. Overseas`;
+  const html = wrap(
+    'Quote accepted',
+    `${greeting(payload)}
+     ${orderLine(payload)}
+     <p>The quote for request <strong>#${esc(payload.orderNumber)}</strong> has been marked accepted. Our export desk will follow up to convert it into a binding order.</p>`
+  );
+  const text = `Quote #${payload.orderNumber} has been marked accepted.${money(payload.totalAmount, payload.currency) ? ` Quoted total: ${money(payload.totalAmount, payload.currency)}.` : ''}`;
+  return { subject, text, html };
+};
+
+export const quoteDeclinedTemplate = (payload = {}) => {
+  const subject = `Quote Declined #${payload.orderNumber} - H.A. Overseas`;
+  const html = wrap(
+    'Quote declined',
+    `${greeting(payload)}
+     ${orderLine(payload)}
+     <p>The quote for request <strong>#${esc(payload.orderNumber)}</strong> has been marked declined.${payload.reason ? ` Reason: <em>${esc(payload.reason)}</em>` : ''}</p>`
+  );
+  const text = `Quote #${payload.orderNumber} has been marked declined.${payload.reason ? ` Reason: ${payload.reason}` : ''}`;
+  return { subject, text, html };
+};
+
 export const EMAIL_TEMPLATES = {
   order_received: orderReceivedTemplate,
   order_confirmed: orderConfirmedTemplate,
@@ -139,6 +192,10 @@ export const EMAIL_TEMPLATES = {
   order_shipped: orderShippedTemplate,
   quote_ready: quoteReadyTemplate,
   payment_received: paymentReceivedTemplate,
+  counter_offer_received: counterOfferReceivedTemplate,
+  counter_offer_responded: counterOfferRespondedTemplate,
+  quote_accepted: quoteAcceptedTemplate,
+  quote_declined: quoteDeclinedTemplate,
 };
 
 /**
