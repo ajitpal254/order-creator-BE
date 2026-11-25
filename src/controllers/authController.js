@@ -1,5 +1,13 @@
 import { User } from '../models/User.js';
-import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../utils/token.js';
+import { RefreshSession } from '../models/RefreshSession.js';
+import {
+  generateAccessToken,
+  verifyRefreshToken,
+  createRefreshSession,
+  findRefreshSessionByToken,
+  hashRefreshToken,
+  revokeAllRefreshSessions,
+} from '../utils/token.js';
 import { sendPasswordResetEmail } from '../utils/emailService.js';
 import crypto from 'crypto';
 
@@ -15,26 +23,22 @@ const COOKIE_OPTIONS = {
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
 };
 
-const sendAuthResponse = async (res, statusCode, user, message) => {
+const requestMeta = (req) => ({
+  userAgent: req?.headers?.['user-agent'] || '',
+  ip: req?.ip || req?.headers?.['x-forwarded-for'] || req?.socket?.remoteAddress || '',
+});
+
+// Issues a new access token + a new RefreshSession, setting the raw
+// refresh token ONLY as an httpOnly cookie (never in the JSON body).
+// Returns the created session so callers (refresh rotation) can link
+// the previous session to it via replacedBy.
+const sendAuthResponse = async (req, res, statusCode, user, message) => {
   const accessToken = generateAccessToken(user);
-  const refreshToken = generateRefreshToken(user);
+  const { rawToken, session } = await createRefreshSession(user, requestMeta(req));
 
-  // Store refresh token in user document (prune old expired tokens)
-  const now = new Date();
-  user.refreshTokens = (user.refreshTokens || []).filter(
-    (rt) => rt.expiresAt && rt.expiresAt > now
-  );
-  user.refreshTokens.push({
-    token: refreshToken,
-    createdAt: now,
-    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-  });
+  res.cookie(REFRESH_COOKIE_NAME, rawToken, COOKIE_OPTIONS);
 
-  await user.save();
-
-  res.cookie(REFRESH_COOKIE_NAME, refreshToken, COOKIE_OPTIONS);
-
-  return res.status(statusCode).json({
+  res.status(statusCode).json({
     success: true,
     message,
     token: accessToken,
@@ -52,6 +56,7 @@ const sendAuthResponse = async (res, statusCode, user, message) => {
       distributorTier: user.distributorTier,
     },
   });
+  return session;
 };
 
 // @desc Register a new user
@@ -99,6 +104,7 @@ export const signup = async (req, res) => {
     await newUser.save();
 
     return await sendAuthResponse(
+      req,
       res,
       201,
       newUser,
@@ -149,6 +155,7 @@ export const login = async (req, res) => {
     }
 
     return await sendAuthResponse(
+      req,
       res,
       200,
       user,
@@ -168,7 +175,9 @@ export const login = async (req, res) => {
 // @route POST /api/auth/refresh
 export const refreshTokenHandler = async (req, res) => {
   try {
-    const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME] || req.body?.refreshToken;
+    // SEC-07: the refresh token is accepted from the httpOnly cookie
+    // ONLY. A token supplied in the JSON body is never honoured.
+    const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME];
 
     if (!refreshToken) {
       return res.status(401).json({
@@ -197,9 +206,8 @@ export const refreshTokenHandler = async (req, res) => {
       });
     }
 
-    // Verify token exists in user's active refresh tokens
-    const tokenRecord = user.refreshTokens?.find((rt) => rt.token === refreshToken);
-    if (!tokenRecord) {
+    const session = await findRefreshSessionByToken(refreshToken);
+    if (!session || String(session.user) !== String(user._id) || session.expiresAt <= new Date()) {
       res.clearCookie(REFRESH_COOKIE_NAME, COOKIE_OPTIONS);
       return res.status(401).json({
         success: false,
@@ -207,10 +215,37 @@ export const refreshTokenHandler = async (req, res) => {
       });
     }
 
-    // Token rotation: Remove old refresh token and issue new pair
-    user.refreshTokens = user.refreshTokens.filter((rt) => rt.token !== refreshToken);
-    
-    return await sendAuthResponse(res, 200, user, 'Token refreshed successfully');
+    // REUSE DETECTION: a rotated/revoked token being presented again
+    // means it was likely stolen — kill the user's whole session family.
+    if (session.status !== 'active') {
+      await revokeAllRefreshSessions(user._id);
+      res.clearCookie(REFRESH_COOKIE_NAME, COOKIE_OPTIONS);
+      return res.status(401).json({
+        success: false,
+        message: 'Refresh token reuse detected. All sessions have been revoked.',
+      });
+    }
+
+    // Rotation: mark the old session rotated (kept until expiry so a
+    // replay of it is detectable above), then issue a fresh session.
+    // updateOne (not doc.save()) so a row deleted mid-flight — e.g. by a
+    // concurrent revoke-all — is a no-op rather than DocumentNotFound.
+    await RefreshSession.updateOne({ _id: session._id }, { $set: { status: 'rotated' } });
+
+    const newSession = await sendAuthResponse(req, res, 200, user, 'Token refreshed successfully');
+    if (newSession?._id) {
+      // Best-effort linkage: the response is already sent, so a failure
+      // here must never turn a successful refresh into a 500.
+      try {
+        await RefreshSession.updateOne(
+          { _id: session._id },
+          { $set: { replacedBy: newSession._id } }
+        );
+      } catch (linkErr) {
+        console.error('[Token Refresh] Failed to link rotated session', linkErr);
+      }
+    }
+    return newSession;
   } catch (error) {
     console.error('[Token Refresh Error]', error);
     return res.status(500).json({
@@ -225,12 +260,12 @@ export const refreshTokenHandler = async (req, res) => {
 // @route POST /api/auth/logout
 export const logout = async (req, res) => {
   try {
-    const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME] || req.body?.refreshToken;
+    // SEC-07: cookie only (no body fallback). Deletes ONLY the
+    // presented session; the user's other sessions stay alive.
+    const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME];
 
-    if (refreshToken && req.user?._id) {
-      await User.findByIdAndUpdate(req.user._id, {
-        $pull: { refreshTokens: { token: refreshToken } },
-      });
+    if (refreshToken) {
+      await RefreshSession.deleteOne({ tokenHash: hashRefreshToken(refreshToken) });
     }
 
     res.clearCookie(REFRESH_COOKIE_NAME, COOKIE_OPTIONS);
@@ -338,7 +373,7 @@ export const googleAuth = async (req, res) => {
       await user.save();
     }
 
-    return await sendAuthResponse(res, 200, user, 'Google Sign-in successful!');
+    return await sendAuthResponse(req, res, 200, user, 'Google Sign-in successful!');
 
   } catch (error) {
     console.error('[Google Auth Error]', error);
@@ -420,6 +455,9 @@ export const resetPassword = async (req, res) => {
     user.resetPasswordToken = undefined;
     user.resetPasswordExpires = undefined;
     await user.save();
+
+    // SEC-07: a password reset revokes every existing session.
+    await revokeAllRefreshSessions(user._id);
 
     return res.status(200).json({
       success: true,
