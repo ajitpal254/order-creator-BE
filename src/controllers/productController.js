@@ -1,11 +1,12 @@
 import { Product } from '../models/Product.js';
 import { createSearchRegex } from '../utils/escapeRegExp.js';
+import { parsePagination, paginatedResponse } from '../utils/paginate.js';
 
 // @desc Get all products with filters
 // @route GET /api/products
 export const getProducts = async (req, res) => {
   try {
-    const { category, brand, finish, search, limit = 100, page = 1 } = req.query;
+    const { category, brand, finish, search } = req.query;
     const filter = { 
       isActive: true,
       sku: { $exists: true, $ne: null }
@@ -30,21 +31,16 @@ export const getProducts = async (req, res) => {
       ];
     }
 
-    const pageNum = Math.max(1, parseInt(page, 10) || 1);
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 100));
-    const skip = (pageNum - 1) * limitNum;
+    // QOL-12: standard envelope via the shared helper (same defaults/caps
+    // as before: page >= 1, limit default 100, cap 100). The old `pages`
+    // field is dropped in favour of the standard `count`/`limit` fields.
+    const { page, limit, skip } = parsePagination(req);
     const [products, total] = await Promise.all([
-      Product.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limitNum),
+      Product.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
       Product.countDocuments(filter),
     ]);
 
-    return res.status(200).json({
-      success: true,
-      total,
-      page: pageNum,
-      pages: Math.ceil(total / limitNum),
-      data: products,
-    });
+    return paginatedResponse(res, { items: products, total, page, limit });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }

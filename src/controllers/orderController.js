@@ -17,6 +17,7 @@ import {
 import { calculateInvoiceTotals } from '../utils/taxCalculator.js';
 import { createSearchRegex } from '../utils/escapeRegExp.js';
 import { generateOrderNumber } from '../utils/idGenerator.js';
+import { parsePagination, paginatedResponse } from '../utils/paginate.js';
 
 // Staff roles (mirrors STAFF_ROLES in invoiceController.js / staffRoles in routes):
 // holders of these roles act on any user's orders; everyone else ('user'/'buyer')
@@ -299,8 +300,14 @@ export const getMyOrders = async (req, res) => {
       filter.orderType = orderType;
     }
 
-    const orders = await Order.find(filter).sort({ createdAt: -1 });
-    return res.status(200).json({ success: true, count: orders.length, data: orders });
+    // QOL-12: standard paginated envelope (was {success,count,data} with
+    // no pagination). Same filter and ordering as before.
+    const { page, limit, skip } = parsePagination(req);
+    const [orders, total] = await Promise.all([
+      Order.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      Order.countDocuments(filter),
+    ]);
+    return paginatedResponse(res, { items: orders, total, page, limit });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
