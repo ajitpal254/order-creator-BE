@@ -65,21 +65,12 @@ const userSchema = new mongoose.Schema(
       enum: ['Standard', 'Bronze', 'Silver', 'Gold', 'Platinum'],
       default: 'Standard',
     },
-    refreshTokens: [
-      {
-        token: {
-          type: String,
-          required: true,
-        },
-        createdAt: {
-          type: Date,
-          default: Date.now,
-        },
-        expiresAt: {
-          type: Date,
-        },
-      },
-    ],
+    // SEC-07 (v0.2): refresh tokens used to live here as plaintext in a
+    // refreshTokens array. They now live as SHA-256 hashes in the
+    // RefreshSession collection (src/models/RefreshSession.js). The field
+    // is intentionally NOT declared anymore; existing documents that still
+    // carry it are harmless — Mongoose (strict by default) simply ignores
+    // the undeclared path on load/save.
     firebaseUid: {
       type: String,
       default: null,
@@ -112,5 +103,10 @@ userSchema.pre('save', async function (next) {
 userSchema.methods.comparePassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
+
+// QOL-07: the admin user list (routes/userRoutes.js) filters by role
+// and sorts by createdAt desc. email and username already carry unique
+// indexes (login / Google sign-in look users up by email).
+userSchema.index({ role: 1, createdAt: -1 });
 
 export const User = mongoose.model('User', userSchema);

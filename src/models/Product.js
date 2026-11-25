@@ -78,4 +78,13 @@ const productSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// QOL-07 indexes, matched to getProducts in productController.js:
+// list filter is { isActive: true, sku: { $exists } } with optional
+// category equality and a name/sku/description/category search, sorted
+// by createdAt desc and paginated. sku already carries a unique index.
+productSchema.index({ name: 1 });
+productSchema.index({ category: 1 });
+productSchema.index({ isActive: 1, createdAt: -1 });
+productSchema.index({ isActive: 1, category: 1, createdAt: -1 });
+
 export const Product = mongoose.model('Product', productSchema);

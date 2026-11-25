@@ -2,6 +2,12 @@ import jwt from 'jsonwebtoken';
 
 import crypto from 'crypto';
 
+import {
+  RefreshSession,
+  REFRESH_SESSION_TTL_MS,
+  MAX_ACTIVE_SESSIONS_PER_USER,
+} from '../models/RefreshSession.js';
+
 let devSecret = null;
 let devRefreshSecret = null;
 
@@ -55,10 +61,62 @@ export const generateAccessToken = (user) => {
  * Generates a rotating refresh token (7 days by default)
  */
 export const generateRefreshToken = (user) => {
-  return jwt.sign({ id: user._id || user.id }, getJwtRefreshSecret(), {
-    expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
-    algorithm: 'HS256',
+  // jti makes every issued token unique even for the same user within
+  // the same second — sessions are keyed by token hash, so two logins
+  // must never produce identical raw tokens.
+  return jwt.sign(
+    { id: user._id || user.id, jti: crypto.randomUUID() },
+    getJwtRefreshSecret(),
+    {
+      expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
+      algorithm: 'HS256',
+    }
+  );
+};
+
+/** SHA-256 hex digest of a raw refresh token (what we store). */
+export const hashRefreshToken = (token) =>
+  crypto.createHash('sha256').update(token).digest('hex');
+
+/**
+ * Create a RefreshSession row for `user` and return { rawToken, session }.
+ * Enforces the per-user cap: creating beyond MAX_ACTIVE_SESSIONS_PER_USER
+ * active sessions deletes the oldest active session(s) first.
+ */
+export const createRefreshSession = async (user, { userAgent = '', ip = '' } = {}) => {
+  const userId = user._id || user.id;
+
+  const active = await RefreshSession.find({ user: userId, status: 'active' })
+    .sort({ createdAt: 1, _id: 1 })
+    .select('_id')
+    .lean();
+  const excess = active.length - (MAX_ACTIVE_SESSIONS_PER_USER - 1);
+  if (excess > 0) {
+    const oldestIds = active.slice(0, excess).map((s) => s._id);
+    await RefreshSession.deleteMany({ _id: { $in: oldestIds } });
+  }
+
+  const rawToken = generateRefreshToken(user);
+  const session = await RefreshSession.create({
+    user: userId,
+    tokenHash: hashRefreshToken(rawToken),
+    userAgent: userAgent || '',
+    ip: ip || '',
+    status: 'active',
+    expiresAt: new Date(Date.now() + REFRESH_SESSION_TTL_MS),
   });
+  return { rawToken, session };
+};
+
+/** Look up a session (any status) by its raw token. */
+export const findRefreshSessionByToken = async (rawToken) => {
+  if (!rawToken) return null;
+  return RefreshSession.findOne({ tokenHash: hashRefreshToken(rawToken) });
+};
+
+/** Delete every session belonging to a user (revoke-all paths). */
+export const revokeAllRefreshSessions = async (userId) => {
+  await RefreshSession.deleteMany({ user: userId });
 };
 
 /**
