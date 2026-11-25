@@ -10,7 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "lint": "node --check src/**/*.js 2>&1 || true"
+    "lint": "eslint ."
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -28,8 +28,12 @@
     "zod": "^4.5.4"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@vitest/coverage-v8": "^5.0.1",
+    "eslint": "^10.15.0",
+    "globals": "^17.14.0",
     "mongodb-memory-server": "^11.3.0",
+    "prettier": "^3.10.1",
     "supertest": "^7.3.0",
     "vitest": "^5.0.1"
   }
