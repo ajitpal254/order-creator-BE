@@ -67,6 +67,38 @@ const orderItemSchema = new mongoose.Schema({
   },
 });
 
+// FEAT-02 (v0.5): one buyer counter-offer against a quote. Staff respond
+// via POST /api/orders/:id/counter-offer/:offerId/respond.
+const counterOfferSchema = new mongoose.Schema({
+  by: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+  },
+  byRole: {
+    type: String,
+    default: 'user',
+  },
+  amount: {
+    type: Number,
+    required: true,
+    min: [0, 'Counter-offer amount cannot be negative'],
+  },
+  message: {
+    type: String,
+    default: '',
+  },
+  status: {
+    type: String,
+    enum: ['pending', 'accepted', 'declined'],
+    default: 'pending',
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
+});
+
 const orderSchema = new mongoose.Schema(
   {
     orderNumber: {
@@ -161,6 +193,34 @@ const orderSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    // FEAT-02 (v0.5) quote workflow — additive fields, only meaningful
+    // when orderType === 'Quote'. quoteStatus is deliberately separate
+    // from the order `status` state machine: the state machine has no
+    // buyer-driven path to Confirmed (that stays staff-only via
+    // convert-quote), so a buyer accepting a quote records the decision
+    // here without forcing an illegal status transition.
+    quoteValidityDate: {
+      type: Date,
+      default: null,
+    },
+    quoteVersion: {
+      type: Number,
+      default: 1,
+    },
+    quoteStatus: {
+      type: String,
+      enum: ['open', 'accepted', 'declined'],
+      default: 'open',
+    },
+    quoteAcceptedAt: {
+      type: Date,
+      default: null,
+    },
+    quoteDeclineReason: {
+      type: String,
+      default: '',
+    },
+    counterOffers: [counterOfferSchema],
     trackingNumber: {
       type: String,
       default: null,
