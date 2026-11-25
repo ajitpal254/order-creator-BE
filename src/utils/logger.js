@@ -1,37 +1,47 @@
 /**
- * Structured Logger utility
- * Provides leveled logging with timestamp and optional request correlation ID
+ * Structured Logger utility (QOL-06: backed by pino).
+ *
+ * The exported interface is unchanged from the original hand-rolled
+ * logger — { info, warn, error, debug }(message, meta) — so existing
+ * call sites keep working. Log lines are JSON with the same field
+ * names as before: `timestamp` (ISO), `level` (uppercase string),
+ * `message`, plus any meta fields merged in (including `requestId`
+ * when call sites pass it).
  */
+import pino from 'pino';
 
-const LOG_LEVELS = {
-  DEBUG: 'DEBUG',
-  INFO: 'INFO',
-  WARN: 'WARN',
-  ERROR: 'ERROR',
+const pinoOptions = {
+  level: 'debug',
+  messageKey: 'message',
+  formatters: {
+    level: (label) => ({ level: label.toUpperCase() }),
+  },
+  timestamp: () => `,"timestamp":"${new Date().toISOString()}"`,
 };
 
-const formatMessage = (level, message, meta = {}) => {
-  return JSON.stringify({
-    timestamp: new Date().toISOString(),
-    level,
-    message,
-    ...meta,
-  });
+/**
+ * Create a logger with the standard interface. `destination` is an
+ * optional writable stream (defaults to stdout via pino) — used by
+ * tests to capture emitted lines.
+ */
+export const createLogger = (destination) => {
+  const base = destination ? pino(pinoOptions, destination) : pino(pinoOptions);
+  const wrap = (level) => (message, meta = {}) => {
+    base[level](meta ?? {}, message);
+  };
+  return {
+    info: wrap('info'),
+    warn: wrap('warn'),
+    error: wrap('error'),
+    debug: (message, meta = {}) => {
+      // Preserve the original behaviour: debug lines only outside production.
+      if (process.env.NODE_ENV !== 'production') {
+        base.debug(meta ?? {}, message);
+      }
+    },
+    // Escape hatch for advanced pino usage / tests.
+    pino: base,
+  };
 };
 
-export const logger = {
-  info: (message, meta = {}) => {
-    console.log(formatMessage(LOG_LEVELS.INFO, message, meta));
-  },
-  warn: (message, meta = {}) => {
-    console.warn(formatMessage(LOG_LEVELS.WARN, message, meta));
-  },
-  error: (message, meta = {}) => {
-    console.error(formatMessage(LOG_LEVELS.ERROR, message, meta));
-  },
-  debug: (message, meta = {}) => {
-    if (process.env.NODE_ENV !== 'production') {
-      console.log(formatMessage(LOG_LEVELS.DEBUG, message, meta));
-    }
-  },
-};
+export const logger = createLogger();

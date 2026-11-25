@@ -23,8 +23,13 @@ import userRoutes from './routes/userRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import { sanitizeMongoInput } from './middleware/mongoSanitize.js';
 import { jsonBodyParser, urlencodedBodyParser } from './middleware/bodyParsers.js';
+import { readyHandler, docsHandler } from './utils/metaHandlers.js';
+import { initSentry } from './utils/sentry.js';
 
 dotenv.config();
+
+// QOL-06: Sentry is env-gated — a no-op unless SENTRY_DSN is set.
+await initSentry();
 
 // Boot-time env validation (QOL-03): in production this fails fast,
 // listing EVERY missing required variable in one error. Optional
@@ -32,14 +37,14 @@ dotenv.config();
 try {
   validateEnv();
 } catch (err) {
-  console.error(`FATAL: ${err.message}`);
+  logger.error(`FATAL: ${err.message}`);
   process.exit(1);
 }
 
 // Secrets & Env Hygiene: refuse booting with placeholder secrets in production
 if (process.env.NODE_ENV === 'production') {
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
-    console.error('FATAL: JWT_SECRET must be configured with at least 16 characters in production!');
+    logger.error('FATAL: JWT_SECRET must be configured with at least 16 characters in production!');
     process.exit(1);
   }
 }
@@ -170,6 +175,13 @@ app.get('/api/health', (req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+// QOL-06: readiness probe — 200 only when the DB connection pings.
+app.get('/api/ready', readyHandler);
+
+// QOL-05: OpenAPI spec (JSON) — non-production only; 404s in production.
+app.get('/api/docs', docsHandler);
+
 
 // 404 Route Handler
 app.use((req, res) => {
