@@ -16,6 +16,7 @@ import {
 } from '../utils/emailService.js';
 import { calculateInvoiceTotals } from '../utils/taxCalculator.js';
 import { createSearchRegex } from '../utils/escapeRegExp.js';
+import { generateOrderNumber } from '../utils/idGenerator.js';
 
 // Staff roles (mirrors STAFF_ROLES in invoiceController.js / staffRoles in routes):
 // holders of these roles act on any user's orders; everyone else ('user'/'buyer')
@@ -30,13 +31,9 @@ const STAFF_ROLES = [
 ];
 
 
-// Helper to generate sequential-style Order Number
-const generateOrderNumber = (orderType = 'Order') => {
-  const prefix = orderType === 'Quote' ? 'RFQ' : 'HAO';
-  const year = new Date().getFullYear();
-  const randomPart = Math.floor(100000 + Math.random() * 900000);
-  return `${prefix}-${year}-${randomPart}`;
-};
+// Order numbers come from the atomic Counter (SEC-12) via
+// utils/idGenerator.js — same "HAO-<year>-<6 digits>" /
+// "RFQ-<year>-<6 digits>" format as the old random generator.
 
 // @desc Create or Draft a customized order / quotation
 // @route POST /api/orders
@@ -149,8 +146,6 @@ export const createOrder = async (req, res) => {
     const totalAmount = validatedItems.reduce((sum, it) => sum + it.totalPrice, 0);
     const discountAmount = parseFloat(Math.max(0, subtotalAmount - totalAmount).toFixed(2));
 
-    const orderNumber = generateOrderNumber(orderType);
-
     const customerDetails = {
       customerName: customerDetailsOverride?.customerName || req.user.customerName,
       businessName: customerDetailsOverride?.businessName || req.user.businessName,
@@ -162,8 +157,17 @@ export const createOrder = async (req, res) => {
 
     const initialStatus = status === ORDER_STATES.DRAFT ? ORDER_STATES.DRAFT : ORDER_STATES.SUBMITTED;
 
-    const order = new Order({
-      orderNumber,
+    // SEC-12: generate the order number from the atomic counter and
+    // save; on a duplicate-key error (11000 — e.g. a legacy random
+    // number already occupies the next counter slot) draw the next
+    // counter value and retry, up to 5 attempts.
+    let order = null;
+    let orderNumber = null;
+    const MAX_SAVE_ATTEMPTS = 5;
+    for (let attempt = 0; attempt < MAX_SAVE_ATTEMPTS; attempt += 1) {
+      orderNumber = await generateOrderNumber(orderType);
+      order = new Order({
+        orderNumber,
       orderType,
       user: req.user._id,
       customerDetails,
@@ -196,9 +200,16 @@ export const createOrder = async (req, res) => {
               : 'Order submitted online by buyer',
         },
       ],
-    });
-
-    await order.save();
+      });
+      try {
+        await order.save();
+        break;
+      } catch (saveError) {
+        const isDuplicateKey = saveError?.code === 11000;
+        if (!isDuplicateKey || attempt === MAX_SAVE_ATTEMPTS - 1) throw saveError;
+        logger.warn(`Duplicate order number ${orderNumber} (attempt ${attempt + 1}); retrying with next counter value`);
+      }
+    }
 
     logger.info(`New ${orderType} created: ${orderNumber} [${initialStatus}]`, {
       orderId: order._id,
