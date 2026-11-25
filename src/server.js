@@ -9,6 +9,8 @@ import { fileURLToPath } from 'url';
 import rateLimit from 'express-rate-limit';
 
 import { connectDB } from './config/db.js';
+import { validateEnv } from './config/validateEnv.js';
+import { globalErrorHandler } from './middleware/errorHandler.js';
 import { seedDatabase } from './seed/seedData.js';
 import { logger } from './utils/logger.js';
 
@@ -21,6 +23,16 @@ import userRoutes from './routes/userRoutes.js';
 import { sanitizeMongoInput } from './middleware/mongoSanitize.js';
 
 dotenv.config();
+
+// Boot-time env validation (QOL-03): in production this fails fast,
+// listing EVERY missing required variable in one error. Optional
+// variables only ever warn, and non-production never throws.
+try {
+  validateEnv();
+} catch (err) {
+  console.error(`FATAL: ${err.message}`);
+  process.exit(1);
+}
 
 // Secrets & Env Hygiene: refuse booting with placeholder secrets in production
 if (process.env.NODE_ENV === 'production') {
@@ -75,7 +87,11 @@ app.use(
         return callback(null, true);
       }
 
-      return callback(new Error(`CORS policy violation: origin '${origin}' is not authorized.`));
+      // SEC-05: a rejected origin is a 403, not a 500 — tag the error so
+      // the global error handler can map it (it also matches the message).
+      const corsError = new Error(`CORS policy violation: origin '${origin}' is not authorized.`);
+      corsError.status = 403;
+      return callback(corsError);
     },
     credentials: true,
   })
@@ -157,20 +173,8 @@ app.use((req, res) => {
   });
 });
 
-// Global Error Handler
-app.use((err, req, res, next) => {
-  logger.error('Unhandled Global Error', {
-    requestId: req.id,
-    error: err.message,
-    stack: process.env.NODE_ENV !== 'production' ? err.stack : undefined,
-  });
-
-  res.status(err.status || 500).json({
-    success: false,
-    message: err.message || 'Internal Server Error',
-    requestId: req.id,
-  });
-});
+// Global Error Handler (SEC-05: generic 5xx in production, CORS → 403)
+app.use(globalErrorHandler);
 
 // Start Server and Initialize DB
 const startServer = async () => {
@@ -183,7 +187,11 @@ const startServer = async () => {
       logger.info(`H.A. Overseas API running on http://${HOST}:${PORT}`, { port: PORT });
     });
   } catch (err) {
+    // SEC-11: a failed start must actually fail — exit non-zero so the
+    // host (Render) reports the deploy as failed instead of leaving a
+    // dead process that looks alive.
     logger.error('Fatal Error on Server Start', { error: err.message });
+    process.exit(1);
   }
 };
 
