@@ -212,4 +212,14 @@ const orderSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// QOL-07 indexes, matched to the query patterns in orderController.js:
+// - getMyOrders / getAllOrders list by user and/or status, newest first
+//   (filter { user } or { status }, sort { createdAt: -1 }).
+// - getActiveDraft / getBuyerAnalytics filter by { user, status }.
+// Single-field indexes on orderNumber (unique), user, status and
+// orderType already exist on the fields above.
+orderSchema.index({ user: 1, createdAt: -1 });
+orderSchema.index({ status: 1, createdAt: -1 });
+orderSchema.index({ user: 1, status: 1 });
+
 export const Order = mongoose.model('Order', orderSchema);
