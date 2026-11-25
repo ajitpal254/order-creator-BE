@@ -26,6 +26,7 @@ import {
   enqueueOrderShipped,
 } from '../services/outbox.js';
 import { notifyOrderCreated, notifyOrderStatusChanged } from '../services/notify.js';
+import { getRates as getFxRates, convert as convertFx } from '../services/fx.js';
 
 // FEAT-01 (v0.4): comms wiring is failure-isolated, mirroring logAudit —
 // an outbox/notification failure must never break the order request.
@@ -543,6 +544,31 @@ export const updateOrderStatus = async (req, res) => {
     }
 
     await order.save();
+
+    // FEAT-04 (v0.5): lock the FX rate when an order transitions INTO
+    // Confirmed. Additive snapshot only (fxRateLocked / baseCurrency /
+    // baseTotal) — no existing total is recomputed. Failure-isolated:
+    // an FX failure must never break order confirmation, so any error
+    // is logged and the confirmation continues without lock fields.
+    if (status === ORDER_STATES.CONFIRMED && previousStatus !== ORDER_STATES.CONFIRMED) {
+      try {
+        const { rates } = await getFxRates();
+        const orderCurrency = order.currency || 'USD';
+        const lockedRate =
+          orderCurrency === 'USD' ? 1 : convertFx(1, orderCurrency, 'USD', rates);
+        order.fxRateLocked = lockedRate;
+        order.baseCurrency = 'USD';
+        order.baseTotal = parseFloat(
+          convertFx(order.totalAmount || 0, orderCurrency, 'USD', rates).toFixed(2)
+        );
+        await order.save();
+      } catch (fxErr) {
+        logger.error('FX rate lock failed on order confirmation', {
+          error: fxErr.message,
+          orderId: order._id,
+        });
+      }
+    }
 
     // SEC-10: audit the status transition (only when one happened)
     if (status && status !== previousStatus) {
