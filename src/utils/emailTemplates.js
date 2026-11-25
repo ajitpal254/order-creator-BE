@@ -185,6 +185,25 @@ export const quoteDeclinedTemplate = (payload = {}) => {
   return { subject, text, html };
 };
 
+// FEAT-16 (v0.7): assistant human-handoff. Payload: customerName,
+// customerEmail/email, note, transcript, conversationId.
+export const assistantHandoffTemplate = (payload = {}) => {
+  const customerEmail = payload.customerEmail || payload.email || '';
+  const subject = `Assistant Handoff Request${payload.customerName ? ` from ${payload.customerName}` : ''} - H.A. Overseas`;
+  const transcriptText = String(payload.transcript || '');
+  const html = wrap(
+    'Assistant handoff requested',
+    `<p>A customer has asked for a human follow-up from the AI Order Desk Assistant.</p>
+     <p><strong>Customer:</strong> ${esc(payload.customerName || 'Unknown')}${customerEmail ? ` (${esc(customerEmail)})` : ''}</p>
+     ${payload.note ? `<p><strong>Note:</strong> ${esc(payload.note)}</p>` : ''}
+     ${payload.conversationId ? `<p><strong>Conversation:</strong> ${esc(payload.conversationId)}</p>` : ''}
+     <p><strong>Transcript:</strong></p>
+     <pre style="white-space: pre-wrap; background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 6px;">${esc(transcriptText)}</pre>`
+  );
+  const text = `A customer has asked for a human follow-up from the AI Order Desk Assistant.\nCustomer: ${payload.customerName || 'Unknown'}${customerEmail ? ` (${customerEmail})` : ''}${payload.note ? `\nNote: ${payload.note}` : ''}\nTranscript:\n${transcriptText}`;
+  return { subject, text, html };
+};
+
 export const EMAIL_TEMPLATES = {
   order_received: orderReceivedTemplate,
   order_confirmed: orderConfirmedTemplate,
@@ -196,6 +215,7 @@ export const EMAIL_TEMPLATES = {
   counter_offer_responded: counterOfferRespondedTemplate,
   quote_accepted: quoteAcceptedTemplate,
   quote_declined: quoteDeclinedTemplate,
+  assistantHandoff: assistantHandoffTemplate,
 };
 
 /**
