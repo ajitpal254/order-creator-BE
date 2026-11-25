@@ -25,6 +25,8 @@ import notificationRoutes from './routes/notificationRoutes.js';
 import fxRoutes from './routes/fxRoutes.js';
 import templateRoutes from './routes/templateRoutes.js';
 import addressRoutes from './routes/addressRoutes.js';
+import paymentRoutes from './routes/paymentRoutes.js';
+import { stripeWebhook } from './controllers/paymentController.js';
 import { startOutboxWorker } from './services/outbox.js';
 import { sanitizeMongoInput } from './middleware/mongoSanitize.js';
 import { jsonBodyParser, urlencodedBodyParser } from './middleware/bodyParsers.js';
@@ -110,6 +112,10 @@ app.use(
 );
 
 app.use(cookieParser());
+// FEAT-03 (v0.6): Stripe webhook needs the RAW body for signature
+// verification — wired with express.raw BEFORE the global JSON parser,
+// scoped to this single route so the 100kb JSON limit stays intact elsewhere.
+app.post('/api/payments/webhook/stripe', express.raw({ type: 'application/json', limit: '100kb' }), stripeWebhook);
 // SEC-13: 100kb default body limit (was 10mb). Multipart uploads are
 // handled by multer with its own limits, not by these parsers — see
 // src/middleware/bodyParsers.js.
@@ -163,6 +169,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/fx', fxRoutes);
 app.use('/api/templates', templateRoutes);
 app.use('/api/addresses', addressRoutes);
+app.use('/api/payments', paymentRoutes);
 
 
 // Root Endpoint & Health Checks
