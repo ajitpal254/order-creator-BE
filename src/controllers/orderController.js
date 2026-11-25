@@ -17,6 +17,7 @@ import {
 import { calculateInvoiceTotals } from '../utils/taxCalculator.js';
 import { createSearchRegex } from '../utils/escapeRegExp.js';
 import { generateOrderNumber } from '../utils/idGenerator.js';
+import { logAudit } from '../utils/audit.js';
 
 // Staff roles (mirrors STAFF_ROLES in invoiceController.js / staffRoles in routes):
 // holders of these roles act on any user's orders; everyone else ('user'/'buyer')
@@ -462,6 +463,9 @@ export const updateOrderStatus = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
+    // SEC-10: remember the pre-transition status for the audit row.
+    const previousStatus = order.status;
+
     if (status) {
       const validation = validateStateTransition(
         order.status,
@@ -508,6 +512,17 @@ export const updateOrderStatus = async (req, res) => {
     }
 
     await order.save();
+
+    // SEC-10: audit the status transition (only when one happened)
+    if (status && status !== previousStatus) {
+      await logAudit(req, {
+        action: 'order.status.change',
+        entityType: 'Order',
+        entityId: order._id,
+        before: { status: previousStatus },
+        after: { status: order.status },
+      });
+    }
 
     logger.info(`Order #${order.orderNumber} status transitioned to [${order.status}]`, {
       orderId: order._id,
