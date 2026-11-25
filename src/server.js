@@ -22,6 +22,7 @@ import invoiceRoutes from './routes/invoiceRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
+import fxRoutes from './routes/fxRoutes.js';
 import { startOutboxWorker } from './services/outbox.js';
 import { sanitizeMongoInput } from './middleware/mongoSanitize.js';
 import { jsonBodyParser, urlencodedBodyParser } from './middleware/bodyParsers.js';
@@ -157,6 +158,7 @@ app.use('/api/invoices', invoiceRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/fx', fxRoutes);
 
 
 // Root Endpoint & Health Checks

@@ -162,6 +162,22 @@ const orderSchema = new mongoose.Schema(
       type: Number,
       default: 1.0,
     },
+    // FEAT-04 (v0.5): FX rate locked when the order is Confirmed —
+    // additive snapshot only; the order's own totals are untouched.
+    // fxRateLocked is the order-currency -> baseCurrency (USD) rate,
+    // baseTotal is totalAmount converted at that rate (2dp).
+    fxRateLocked: {
+      type: Number,
+      default: null,
+    },
+    baseCurrency: {
+      type: String,
+      default: null,
+    },
+    baseTotal: {
+      type: Number,
+      default: null,
+    },
     incoterm: {
       type: String,
       enum: ['FOB', 'CIF', 'EXW'],
