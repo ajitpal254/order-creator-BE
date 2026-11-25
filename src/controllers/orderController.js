@@ -17,6 +17,7 @@ import {
 import { calculateInvoiceTotals } from '../utils/taxCalculator.js';
 import { createSearchRegex } from '../utils/escapeRegExp.js';
 import { generateOrderNumber } from '../utils/idGenerator.js';
+import { computeEstimatedShipDate } from '../utils/leadTime.js';
 import { createTrackingToken } from '../utils/trackingToken.js';
 import { logAudit } from '../utils/audit.js';
 import { parsePagination, paginatedResponse } from '../utils/paginate.js';
@@ -487,7 +488,14 @@ export const getOrderById = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Not authorized to view this order' });
     }
 
-    return res.status(200).json({ success: true, data: order });
+    // FEAT-09 (v0.7): estimatedShipDate is computed at serialization
+    // time for the detail response only — never stored, never part of
+    // totals, and not added to any list endpoint.
+    const data = order.toObject();
+    const estimatedShipDate = await computeEstimatedShipDate(order);
+    data.estimatedShipDate = estimatedShipDate ? estimatedShipDate.toISOString() : null;
+
+    return res.status(200).json({ success: true, data });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
