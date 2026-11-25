@@ -40,6 +40,34 @@ const productSchema = new mongoose.Schema(
       default: 50,
       min: 1,
     },
+    // FEAT-09 (v0.7): inventory / lead-time data. Surfaced only in this
+    // release — priceBreaks are DATA ONLY and are never wired into
+    // order pricing or totals; leadTimeDays feeds the serialization-time
+    // estimatedShipDate on the order-detail response.
+    leadTimeDays: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
+    stockQuantity: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
+    availabilityNote: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    priceBreaks: {
+      type: [
+        {
+          minQty: { type: Number, min: 1 },
+          unitPrice: { type: Number, min: 0 },
+        },
+      ],
+      default: [],
+    },
     weightKg: {
       type: Number,
       default: 1.0,
