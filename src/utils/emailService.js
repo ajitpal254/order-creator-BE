@@ -46,6 +46,11 @@ const sendMail = async ({ to, subject, html, text }) => {
   }
 };
 
+// FEAT-01 (v0.4): additive export so the email outbox service
+// (src/services/outbox.js) can send already-rendered mail through the
+// exact same transport/simulated behaviour as the helpers below.
+export const sendRawMail = sendMail;
+
 /**
  * Send buyer order submission confirmation
  */

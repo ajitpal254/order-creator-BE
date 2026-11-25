@@ -81,6 +81,14 @@ const userSchema = new mongoose.Schema(
     },
     resetPasswordToken: String,
     resetPasswordExpires: Date,
+    // FEAT-01 (v0.4): notification preferences. The email outbox
+    // (src/services/outbox.js) skips enqueueing when email === false.
+    notifications: {
+      email: {
+        type: Boolean,
+        default: true,
+      },
+    },
   },
   {
     timestamps: true,
