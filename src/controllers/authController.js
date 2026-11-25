@@ -129,7 +129,7 @@ export const login = async (req, res) => {
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials. User not found.',
+        message: 'Invalid email or password',
       });
     }
 
@@ -144,7 +144,7 @@ export const login = async (req, res) => {
     if (!isMatch) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials. Incorrect password.',
+        message: 'Invalid email or password',
       });
     }
 
@@ -401,8 +401,8 @@ export const forgotPassword = async (req, res) => {
 export const resetPassword = async (req, res) => {
   try {
     const { token, newPassword } = req.body;
-    if (!token || !newPassword || newPassword.length < 6) {
-      return res.status(400).json({ success: false, message: 'Valid token and new password (min 6 chars) are required.' });
+    if (!token || !newPassword || newPassword.length < 10) {
+      return res.status(400).json({ success: false, message: 'Valid token and new password (min 10 chars) are required.' });
     }
 
     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
