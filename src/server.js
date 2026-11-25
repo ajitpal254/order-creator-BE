@@ -25,6 +25,7 @@ import notificationRoutes from './routes/notificationRoutes.js';
 import fxRoutes from './routes/fxRoutes.js';
 import templateRoutes from './routes/templateRoutes.js';
 import addressRoutes from './routes/addressRoutes.js';
+import trackingRoutes from './routes/trackingRoutes.js';
 import { startOutboxWorker } from './services/outbox.js';
 import { sanitizeMongoInput } from './middleware/mongoSanitize.js';
 import { jsonBodyParser, urlencodedBodyParser } from './middleware/bodyParsers.js';
@@ -163,6 +164,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/fx', fxRoutes);
 app.use('/api/templates', templateRoutes);
 app.use('/api/addresses', addressRoutes);
+app.use('/api/track', trackingRoutes);
 
 
 // Root Endpoint & Health Checks

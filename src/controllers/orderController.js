@@ -17,6 +17,7 @@ import {
 import { calculateInvoiceTotals } from '../utils/taxCalculator.js';
 import { createSearchRegex } from '../utils/escapeRegExp.js';
 import { generateOrderNumber } from '../utils/idGenerator.js';
+import { createTrackingToken } from '../utils/trackingToken.js';
 import { logAudit } from '../utils/audit.js';
 import { parsePagination, paginatedResponse } from '../utils/paginate.js';
 import {
@@ -881,6 +882,36 @@ export const getOrderStats = async (req, res) => {
         totalUnitsExported: units,
       },
     });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc Get a shareable public tracking link for an order (FEAT-06, v0.6)
+// @route GET /api/orders/:id/tracking-link
+export const getOrderTrackingLink = async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id).catch(() => null);
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    // SEC-01: owner or staff only; another buyer gets a 404 (not 403),
+    // mirroring reorderOrder.
+    const isStaff = STAFF_ROLES.includes(req.user.role);
+    if (!isStaff && order.user.toString() !== req.user._id.toString()) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    const { token, expiresAt } = createTrackingToken(order._id);
+
+    // CLIENT_URL is the deployed frontend origin; when it is unset
+    // (e.g. in tests) fall back to a relative path so the link is
+    // still usable by whatever host serves the frontend.
+    const base = (process.env.CLIENT_URL || '').replace(/\/$/, '');
+    const url = base ? `${base}/track/${token}` : `/track/${token}`;
+
+    return res.status(200).json({ success: true, data: { token, url, expiresAt } });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
