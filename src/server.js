@@ -9,6 +9,7 @@ import { fileURLToPath } from 'url';
 import rateLimit from 'express-rate-limit';
 
 import { connectDB } from './config/db.js';
+import { validateEnv } from './config/validateEnv.js';
 import { seedDatabase } from './seed/seedData.js';
 import { logger } from './utils/logger.js';
 
@@ -21,6 +22,16 @@ import userRoutes from './routes/userRoutes.js';
 import { sanitizeMongoInput } from './middleware/mongoSanitize.js';
 
 dotenv.config();
+
+// Boot-time env validation (QOL-03): in production this fails fast,
+// listing EVERY missing required variable in one error. Optional
+// variables only ever warn, and non-production never throws.
+try {
+  validateEnv();
+} catch (err) {
+  console.error(`FATAL: ${err.message}`);
+  process.exit(1);
+}
 
 // Secrets & Env Hygiene: refuse booting with placeholder secrets in production
 if (process.env.NODE_ENV === 'production') {
