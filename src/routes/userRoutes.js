@@ -1,6 +1,7 @@
 import express from 'express';
 import { User } from '../models/User.js';
 import { protect, adminOnly } from '../middleware/auth.js';
+import { createSearchRegex } from '../utils/escapeRegExp.js';
 
 const router = express.Router();
 
@@ -8,11 +9,11 @@ const router = express.Router();
 // @route GET /api/users
 router.get('/', protect, adminOnly, async (req, res) => {
   try {
-    const { search } = req.query;
+    const { search, page = 1, limit = 100 } = req.query;
     const filter = { role: 'user' };
 
     if (search) {
-      const regex = new RegExp(search.trim(), 'i');
+      const regex = createSearchRegex(search);
       filter.$or = [
         { customerName: regex },
         { businessName: regex },
@@ -23,8 +24,23 @@ router.get('/', protect, adminOnly, async (req, res) => {
       ];
     }
 
-    const users = await User.find(filter).select('-password').sort({ createdAt: -1 });
-    return res.status(200).json({ success: true, count: users.length, data: users });
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 100));
+    const skip = (pageNum - 1) * limitNum;
+
+    const [users, total] = await Promise.all([
+      User.find(filter).select('-password').sort({ createdAt: -1 }).skip(skip).limit(limitNum),
+      User.countDocuments(filter),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      count: users.length,
+      total,
+      page: pageNum,
+      limit: limitNum,
+      data: users,
+    });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }

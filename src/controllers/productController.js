@@ -1,4 +1,5 @@
 import { Product } from '../models/Product.js';
+import { createSearchRegex } from '../utils/escapeRegExp.js';
 
 // @desc Get all products with filters
 // @route GET /api/products
@@ -20,7 +21,7 @@ export const getProducts = async (req, res) => {
       filter.allowedFinishes = finish;
     }
     if (search) {
-      const searchRegex = new RegExp(search.trim(), 'i');
+      const searchRegex = createSearchRegex(search);
       filter.$or = [
         { name: searchRegex },
         { sku: searchRegex },
@@ -29,17 +30,19 @@ export const getProducts = async (req, res) => {
       ];
     }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 100));
+    const skip = (pageNum - 1) * limitNum;
     const [products, total] = await Promise.all([
-      Product.find(filter).sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit)),
+      Product.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limitNum),
       Product.countDocuments(filter),
     ]);
 
     return res.status(200).json({
       success: true,
       total,
-      page: parseInt(page),
-      pages: Math.ceil(total / parseInt(limit)),
+      page: pageNum,
+      pages: Math.ceil(total / limitNum),
       data: products,
     });
   } catch (error) {
