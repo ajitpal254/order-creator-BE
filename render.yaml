@@ -55,3 +55,10 @@ services:
         value: admin@haoverseas.com
       - key: FIREBASE_PROJECT_ID
         sync: false
+      # FEAT-11 (v0.8): src/services/messaging.js activates the Meta
+      # WhatsApp Cloud API adapter only when BOTH are set; otherwise
+      # WhatsApp sends are recorded as 'simulated' in MessageLog.
+      - key: WHATSAPP_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false

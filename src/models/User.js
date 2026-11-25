@@ -98,12 +98,28 @@ const userSchema = new mongoose.Schema(
     },
     resetPasswordToken: String,
     resetPasswordExpires: Date,
+    // FEAT-11 (v0.8): WhatsApp contact number (E.164-ish, validated on
+    // profile update in authController). Distinct from the required
+    // phoneNumber above: this is the number WhatsApp messages go to,
+    // and it stays empty until the buyer supplies one.
+    phone: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     // FEAT-01 (v0.4): notification preferences. The email outbox
     // (src/services/outbox.js) skips enqueueing when email === false.
+    // FEAT-11 (v0.8): extended with whatsapp — OPT-IN (default false);
+    // the messaging service (src/services/messaging.js) only sends
+    // when whatsapp === true AND a phone is on file.
     notifications: {
       email: {
         type: Boolean,
         default: true,
+      },
+      whatsapp: {
+        type: Boolean,
+        default: false,
       },
     },
   },
