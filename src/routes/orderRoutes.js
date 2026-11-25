@@ -11,6 +11,7 @@ import {
   convertQuoteToOrder,
   getBuyerAnalytics,
   retryInvoiceSync,
+  reorderOrder,
 } from '../controllers/orderController.js';
 import { protect, authorizeRoles } from '../middleware/auth.js';
 import { validate, createOrderSchema, updateOrderStatusSchema } from '../middleware/validate.js';
@@ -54,5 +55,7 @@ router.post(
   authorizeRoles(...staffRoles),
   retryInvoiceSync
 );
+// FEAT-05 (v0.5): reorder — owner (or staff) copies an order into a new Draft
+router.post('/:id/reorder', protect, reorderOrder);
 
 export default router;
