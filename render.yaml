@@ -16,9 +16,36 @@ services:
         sync: false
       - key: JWT_SECRET
         generateValue: true
+      # DEP-01: src/utils/token.js reads JWT_REFRESH_SECRET for refresh
+      # tokens and throws in production when it is missing/short.
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
       - key: JWT_EXPIRES_IN
         value: 7d
+      # DEP-01: src/utils/token.js actually reads JWT_ACCESS_EXPIRES_IN
+      # (access tokens) and JWT_REFRESH_EXPIRES_IN (refresh tokens).
+      - key: JWT_ACCESS_EXPIRES_IN
+        value: 15m
+      - key: JWT_REFRESH_EXPIRES_IN
+        value: 7d
       - key: CLIENT_URL
+        sync: false
+      # DEP-01: src/middleware/internalAuth.js reads INTERNAL_API_KEY
+      # for service-to-service routes.
+      - key: INTERNAL_API_KEY
+        sync: false
+      # DEP-01: src/utils/emailService.js reads SMTP_HOST / SMTP_USER /
+      # SMTP_PASS (plus SMTP_PORT / SMTP_SECURE) and sends from
+      # EMAIL_FROM; SMTP_FROM is provisioned alongside the SMTP_* set.
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: EMAIL_FROM
         sync: false
       - key: ADMIN_USERNAME
         value: admin
