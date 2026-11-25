@@ -5,32 +5,41 @@ import { Product } from '../models/Product.js';
 export const seedDatabase = async () => {
   try {
     // 1. Seed Initial Admin User
+    // SEC-08: never seed an admin with a hard-coded fallback password.
+    // If ADMIN_PASSWORD is unset, skip admin creation entirely and warn.
     const adminUsername = process.env.ADMIN_USERNAME || 'admin';
     const adminEmail = process.env.ADMIN_EMAIL || 'admin@haoverseas.com';
-    const adminPassword = process.env.ADMIN_PASSWORD || 'Admin@Secure2026';
+    const adminPassword = process.env.ADMIN_PASSWORD;
 
-    const existingAdmin = await User.findOne({ 
-      $or: [{ username: adminUsername }, { role: 'admin' }] 
-    });
-
-    if (!existingAdmin) {
-      console.log(`[Seed] Initializing administrator account: ${adminUsername}`);
-      const admin = new User({
-        customerName: 'H.A. Overseas Admin',
-        businessName: 'H.A. Overseas Corporation',
-        country: 'India',
-        phoneNumber: '+91 99884 65800',
-        address: 'Jalandhar Industrial Cluster, Punjab, India',
-        username: adminUsername,
-        email: adminEmail,
-        password: adminPassword,
-        role: 'admin',
-        isActive: true,
-      });
-      await admin.save();
-      console.log('[Seed] Admin account initialized successfully.');
+    if (!adminPassword) {
+      console.warn(
+        '[Seed] WARNING: ADMIN_PASSWORD is not set — skipping admin account creation. ' +
+          'Set ADMIN_PASSWORD in the environment to seed an administrator account; no default password is used.'
+      );
     } else {
-      console.log(`[Seed] Admin user already exists.`);
+      const existingAdmin = await User.findOne({
+        $or: [{ username: adminUsername }, { role: 'admin' }],
+      });
+
+      if (!existingAdmin) {
+        console.log(`[Seed] Initializing administrator account: ${adminUsername}`);
+        const admin = new User({
+          customerName: 'H.A. Overseas Admin',
+          businessName: 'H.A. Overseas Corporation',
+          country: 'India',
+          phoneNumber: '+91 99884 65800',
+          address: 'Jalandhar Industrial Cluster, Punjab, India',
+          username: adminUsername,
+          email: adminEmail,
+          password: adminPassword,
+          role: 'admin',
+          isActive: true,
+        });
+        await admin.save();
+        console.log('[Seed] Admin account initialized successfully.');
+      } else {
+        console.log(`[Seed] Admin user already exists.`);
+      }
     }
 
     // 2. Seed Default Finishes
