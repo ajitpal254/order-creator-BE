@@ -187,7 +187,11 @@ const startServer = async () => {
       logger.info(`H.A. Overseas API running on http://${HOST}:${PORT}`, { port: PORT });
     });
   } catch (err) {
+    // SEC-11: a failed start must actually fail — exit non-zero so the
+    // host (Render) reports the deploy as failed instead of leaving a
+    // dead process that looks alive.
     logger.error('Fatal Error on Server Start', { error: err.message });
+    process.exit(1);
   }
 };
 
