@@ -10,6 +10,7 @@ import rateLimit from 'express-rate-limit';
 
 import { connectDB } from './config/db.js';
 import { validateEnv } from './config/validateEnv.js';
+import { globalErrorHandler } from './middleware/errorHandler.js';
 import { seedDatabase } from './seed/seedData.js';
 import { logger } from './utils/logger.js';
 
@@ -86,7 +87,11 @@ app.use(
         return callback(null, true);
       }
 
-      return callback(new Error(`CORS policy violation: origin '${origin}' is not authorized.`));
+      // SEC-05: a rejected origin is a 403, not a 500 — tag the error so
+      // the global error handler can map it (it also matches the message).
+      const corsError = new Error(`CORS policy violation: origin '${origin}' is not authorized.`);
+      corsError.status = 403;
+      return callback(corsError);
     },
     credentials: true,
   })
@@ -168,20 +173,8 @@ app.use((req, res) => {
   });
 });
 
-// Global Error Handler
-app.use((err, req, res, next) => {
-  logger.error('Unhandled Global Error', {
-    requestId: req.id,
-    error: err.message,
-    stack: process.env.NODE_ENV !== 'production' ? err.stack : undefined,
-  });
-
-  res.status(err.status || 500).json({
-    success: false,
-    message: err.message || 'Internal Server Error',
-    requestId: req.id,
-  });
-});
+// Global Error Handler (SEC-05: generic 5xx in production, CORS → 403)
+app.use(globalErrorHandler);
 
 // Start Server and Initialize DB
 const startServer = async () => {
