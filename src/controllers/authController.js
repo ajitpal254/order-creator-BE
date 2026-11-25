@@ -7,7 +7,17 @@ import {
   findRefreshSessionByToken,
   hashRefreshToken,
   revokeAllRefreshSessions,
+  generateTwoFactorChallengeToken,
+  verifyTwoFactorChallengeToken,
 } from '../utils/token.js';
+import {
+  generateTotpSecret,
+  verifyTotp,
+  buildOtpAuthUri,
+  generateBackupCodes,
+  hashBackupCode,
+} from '../utils/totp.js';
+import { logAudit } from '../utils/audit.js';
 import { sendPasswordResetEmail } from '../utils/emailService.js';
 import crypto from 'crypto';
 
@@ -22,6 +32,17 @@ const COOKIE_OPTIONS = {
   sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
 };
+
+// FEAT-13 (v0.4): staff roles are every role except buyers.
+const STAFF_ROLES = [
+  'admin',
+  'sales_manager',
+  'production_supervisor',
+  'qc_inspector',
+  'shipping_officer',
+  'super_admin',
+];
+const isStaffRole = (role) => STAFF_ROLES.includes(role);
 
 const requestMeta = (req) => ({
   userAgent: req?.headers?.['user-agent'] || '',
@@ -151,6 +172,17 @@ export const login = async (req, res) => {
       return res.status(401).json({
         success: false,
         message: 'Invalid email or password',
+      });
+    }
+
+    // FEAT-13 (v0.4): staff users with 2FA enabled do not get a session
+    // yet — they get a short-lived challenge token and must complete
+    // POST /api/auth/2fa/verify. Buyers never enter this branch.
+    if (user.twoFactorEnabled && isStaffRole(user.role)) {
+      return res.status(200).json({
+        success: true,
+        requires2fa: true,
+        challengeToken: generateTwoFactorChallengeToken(user),
       });
     }
 
@@ -466,6 +498,169 @@ export const resetPassword = async (req, res) => {
   } catch (error) {
     console.error('[Reset Password Error]', error);
     return res.status(500).json({ success: false, message: 'Failed to reset password.' });
+  }
+};
+
+// ── FEAT-13 (v0.4): staff TOTP two-factor authentication ─────────────
+
+const INVALID_2FA_CODE = { success: false, message: 'Invalid authentication code' };
+
+const loadUserWith2fa = (id) =>
+  User.findById(id).select('+twoFactorSecret +twoFactorBackupCodes');
+
+// @desc Begin 2FA setup: store a pending secret (does NOT enable 2FA)
+// @route POST /api/auth/2fa/setup
+export const setupTwoFactor = async (req, res) => {
+  try {
+    if (!isStaffRole(req.user.role)) {
+      return res.status(403).json({ success: false, message: 'Two-factor authentication is available to staff accounts only.' });
+    }
+    const user = await loadUserWith2fa(req.user._id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
+
+    const secret = generateTotpSecret();
+    user.twoFactorSecret = secret;
+    // Pending state only: twoFactorEnabled is left untouched (false for
+    // a first-time setup). Re-running setup overwrites the pending secret.
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      secret,
+      otpauthUri: buildOtpAuthUri({ secret, account: user.email || user.username }),
+    });
+  } catch (error) {
+    console.error('[2FA Setup Error]', error);
+    return res.status(500).json({ success: false, message: 'Failed to set up two-factor authentication.' });
+  }
+};
+
+// @desc Enable 2FA after proving possession of the pending secret
+// @route POST /api/auth/2fa/enable
+export const enableTwoFactor = async (req, res) => {
+  try {
+    if (!isStaffRole(req.user.role)) {
+      return res.status(403).json({ success: false, message: 'Two-factor authentication is available to staff accounts only.' });
+    }
+    const user = await loadUserWith2fa(req.user._id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
+    if (!user.twoFactorSecret) {
+      return res.status(400).json({ success: false, message: 'Two-factor setup has not been started.' });
+    }
+    if (!verifyTotp(user.twoFactorSecret, req.body?.code)) {
+      return res.status(401).json(INVALID_2FA_CODE);
+    }
+
+    const backupCodes = generateBackupCodes();
+    user.twoFactorEnabled = true;
+    user.twoFactorBackupCodes = backupCodes.map(hashBackupCode);
+    await user.save();
+
+    await logAudit(req, {
+      action: 'auth.2fa_enable',
+      entityType: 'User',
+      entityId: user._id,
+      after: { twoFactorEnabled: true },
+    });
+
+    // The ONLY place plaintext backup codes are ever returned.
+    return res.status(200).json({ success: true, backupCodes });
+  } catch (error) {
+    console.error('[2FA Enable Error]', error);
+    return res.status(500).json({ success: false, message: 'Failed to enable two-factor authentication.' });
+  }
+};
+
+// @desc Disable 2FA with a TOTP code or an unused backup code
+// @route POST /api/auth/2fa/disable
+export const disableTwoFactor = async (req, res) => {
+  try {
+    if (!isStaffRole(req.user.role)) {
+      return res.status(403).json({ success: false, message: 'Two-factor authentication is available to staff accounts only.' });
+    }
+    const user = await loadUserWith2fa(req.user._id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
+    if (!user.twoFactorEnabled) {
+      return res.status(400).json({ success: false, message: 'Two-factor authentication is not enabled.' });
+    }
+
+    const code = req.body?.code;
+    const totpOk = user.twoFactorSecret ? verifyTotp(user.twoFactorSecret, code) : false;
+    const backupOk =
+      !totpOk && code ? (user.twoFactorBackupCodes || []).includes(hashBackupCode(code)) : false;
+    if (!totpOk && !backupOk) {
+      return res.status(401).json(INVALID_2FA_CODE);
+    }
+
+    user.twoFactorEnabled = false;
+    user.twoFactorSecret = null;
+    user.twoFactorBackupCodes = [];
+    await user.save();
+
+    await logAudit(req, {
+      action: 'auth.2fa_disable',
+      entityType: 'User',
+      entityId: user._id,
+      after: { twoFactorEnabled: false },
+    });
+
+    return res.status(200).json({ success: true, message: 'Two-factor authentication has been disabled.' });
+  } catch (error) {
+    console.error('[2FA Disable Error]', error);
+    return res.status(500).json({ success: false, message: 'Failed to disable two-factor authentication.' });
+  }
+};
+
+// @desc Complete a 2FA login challenge (challenge token is the credential)
+// @route POST /api/auth/2fa/verify
+export const verifyTwoFactor = async (req, res) => {
+  try {
+    const { challengeToken, code } = req.body || {};
+    if (!challengeToken || !code) {
+      return res.status(401).json(INVALID_2FA_CODE);
+    }
+
+    let decoded;
+    try {
+      decoded = verifyTwoFactorChallengeToken(challengeToken);
+    } catch {
+      return res.status(401).json(INVALID_2FA_CODE);
+    }
+
+    const user = await loadUserWith2fa(decoded.sub);
+    if (!user || !user.isActive || !user.twoFactorEnabled || !isStaffRole(user.role)) {
+      return res.status(401).json(INVALID_2FA_CODE);
+    }
+
+    if (user.twoFactorSecret && verifyTotp(user.twoFactorSecret, code)) {
+      return await sendAuthResponse(
+        req,
+        res,
+        200,
+        user,
+        `Welcome back, ${user.customerName || user.username}!`
+      );
+    }
+
+    // Single-use backup code: remove its hash before completing login.
+    const suppliedHash = hashBackupCode(code);
+    const backupIndex = (user.twoFactorBackupCodes || []).indexOf(suppliedHash);
+    if (backupIndex !== -1) {
+      user.twoFactorBackupCodes.splice(backupIndex, 1);
+      await user.save();
+      return await sendAuthResponse(
+        req,
+        res,
+        200,
+        user,
+        `Welcome back, ${user.customerName || user.username}!`
+      );
+    }
+
+    return res.status(401).json(INVALID_2FA_CODE);
+  } catch (error) {
+    console.error('[2FA Verify Error]', error);
+    return res.status(401).json(INVALID_2FA_CODE);
   }
 };
 
