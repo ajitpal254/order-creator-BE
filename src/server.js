@@ -21,6 +21,7 @@ import orderRoutes from './routes/orderRoutes.js';
 import invoiceRoutes from './routes/invoiceRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import { sanitizeMongoInput } from './middleware/mongoSanitize.js';
+import { jsonBodyParser, urlencodedBodyParser } from './middleware/bodyParsers.js';
 
 dotenv.config();
 
@@ -98,8 +99,11 @@ app.use(
 );
 
 app.use(cookieParser());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// SEC-13: 100kb default body limit (was 10mb). Multipart uploads are
+// handled by multer with its own limits, not by these parsers — see
+// src/middleware/bodyParsers.js.
+app.use(jsonBodyParser);
+app.use(urlencodedBodyParser);
 
 // Sanitize MongoDB operators against NoSQL injection
 app.use(sanitizeMongoInput);
