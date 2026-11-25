@@ -1,0 +1,82 @@
+# =============================================================
+# H.A. Overseas Order Creator — local development stack (QOL-09)
+#
+# Usage:  docker compose up --build
+# API:    http://localhost:5000  (health check: /api/health)
+#
+# NOTE — the FRONTEND is NOT part of this stack.
+# The React frontend (order-creator-FE) runs separately on your
+# machine via its own `npm run dev` (http://localhost:5173) and
+# points at this API. CLIENT_URL below is set to that origin so
+# CORS passes for the local frontend.
+#
+# All secrets below are obvious LOCAL-DEV-ONLY placeholders so the
+# stack boots with zero setup. They are NOT production values —
+# production secrets live in the hosting dashboard (Render) and
+# must never be committed. Any value can be overridden from your
+# shell environment or a local .env file (see .env.example for
+# the full list of variable names).
+# =============================================================
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: ha-overseas-mongo
+    restart: unless-stopped
+    ports:
+      - '27017:27017'
+    environment:
+      MONGO_INITDB_DATABASE: ha_overseas_order_creator
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ['CMD', 'mongosh', '--quiet', '--eval', "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ha-overseas-api
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    ports:
+      # PORT matches .env.example (5000); the Dockerfile exposes it too.
+      - '5000:5000'
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${PORT:-5000}
+      CLIENT_URL: ${CLIENT_URL:-http://localhost:5173}
+      # Points at the compose `mongo` service above — not Atlas,
+      # not localhost (inside the container, localhost is the api
+      # container itself).
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/ha_overseas_order_creator}
+      # LOCAL-DEV-ONLY placeholders (32+ chars so boot validation
+      # passes) — replace with real secrets anywhere beyond your
+      # own machine.
+      JWT_SECRET: ${JWT_SECRET:-local_dev_only_jwt_secret_change_me_0001}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-local_dev_only_refresh_secret_change_me_0002}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-local_dev_only_admin_password}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@haoverseas.com}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-local-dev-placeholder}
+      # Mail is optional in local dev: password-reset mail is
+      # simulated when SMTP is not really configured. Fill these
+      # in (via .env / shell) only if you need real mail locally.
+      SMTP_HOST: ${SMTP_HOST:-smtp.example.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-no-reply@haoverseas.com}
+      SMTP_PASS: ${SMTP_PASS:-local_dev_only_smtp_password}
+      EMAIL_FROM: ${EMAIL_FROM:-"H.A. Overseas Export Desk <orders@haoverseas.com>"}
+
+volumes:
+  mongo_data:
+    name: ha-overseas-mongo-data
