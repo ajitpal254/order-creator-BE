@@ -126,6 +126,29 @@ export const generateToken = (user) => {
   return generateAccessToken(user);
 };
 
+/**
+ * FEAT-13 (v0.4): short-lived challenge token issued by login when a
+ * staff user with 2FA enabled still has to pass the second factor.
+ * Signed with the same secret as access tokens, but the distinct
+ * `purpose` (and `sub` instead of the access payload's `id`) means
+ * neither token type can be used in place of the other.
+ */
+export const generateTwoFactorChallengeToken = (user) => {
+  return jwt.sign(
+    { sub: (user._id || user.id).toString(), purpose: '2fa_challenge' },
+    getJwtSecret(),
+    { expiresIn: '5m', algorithm: 'HS256' }
+  );
+};
+
+export const verifyTwoFactorChallengeToken = (token) => {
+  const decoded = jwt.verify(token, getJwtSecret(), { algorithms: ['HS256'] });
+  if (decoded.purpose !== '2fa_challenge' || !decoded.sub) {
+    throw new Error('Invalid token purpose');
+  }
+  return decoded;
+};
+
 export const verifyAccessToken = (token) => {
   return jwt.verify(token, getJwtSecret(), {
     algorithms: ['HS256'],

@@ -79,6 +79,23 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // FEAT-13 (v0.4): staff TOTP two-factor authentication.
+    // Secret and backup-code hashes are select:false so they never
+    // leak through ordinary queries; handlers opt in explicitly.
+    twoFactorSecret: {
+      type: String,
+      select: false,
+      default: null,
+    },
+    twoFactorEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    twoFactorBackupCodes: {
+      type: [String],
+      select: false,
+      default: [],
+    },
     resetPasswordToken: String,
     resetPasswordExpires: Date,
   },
