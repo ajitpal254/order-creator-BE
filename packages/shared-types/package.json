@@ -1,0 +1,1 @@
+{"dependencies":{"zod":"^4.5.4"},"main":"dist/index.d.ts","name":"@hao/shared-types","private":true,"scripts":{"build":"tsc -p tsconfig.json"},"type":"module","types":"dist/index.d.ts","version":"1.0.0"}

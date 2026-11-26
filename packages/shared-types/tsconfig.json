@@ -1,0 +1,1 @@
+{"compilerOptions":{"declaration":true,"emitDeclarationOnly":true,"forceConsistentCasingInFileNames":true,"module":"ESNext","moduleResolution":"bundler","outDir":"dist","rootDir":"src","skipLibCheck":true,"strict":true,"target":"ES2022"},"include":["src/**/*.ts"]}
