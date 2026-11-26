@@ -33,7 +33,9 @@ import assistantRoutes from './routes/assistantRoutes.js';
 import companyRoutes from './routes/companyRoutes.js';
 import gstRoutes from './routes/gstRoutes.js';
 import publicRoutes from './routes/publicRoutes.js';
-import { startOutboxWorker } from './services/outbox.js';
+import { OUTBOX_INTERVAL_MS } from './services/outbox.js';
+import { registerBuiltinJobs } from './services/jobs.js';
+import { startQueue, scheduleRecurring } from './services/queue.js';
 import { sanitizeMongoInput } from './middleware/mongoSanitize.js';
 import { jsonBodyParser, urlencodedBodyParser } from './middleware/bodyParsers.js';
 import { readyHandler, docsHandler } from './utils/metaHandlers.js';
@@ -226,8 +228,15 @@ app.use(globalErrorHandler);
 const startServer = async () => {
   try {
     await connectDB();
-    // FEAT-01 (v0.4): start the transactional email outbox worker.
-    startOutboxWorker();
+    // v1.0 (B2): the transactional email outbox now runs through the
+    // job queue platform layer. startOutboxWorker() only ever set an
+    // interval (no immediate first pass), so boot matches that: the
+    // recurring 'email.outbox.process' job fires first after
+    // OUTBOX_INTERVAL_MS, and the queue is the ONLY mechanism running
+    // it — startOutboxWorker() is no longer called here.
+    registerBuiltinJobs();
+    await startQueue();
+    scheduleRecurring('email.outbox.process', OUTBOX_INTERVAL_MS);
     await seedDatabase();
 
     const HOST = '0.0.0.0';
