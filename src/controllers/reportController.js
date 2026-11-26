@@ -292,3 +292,36 @@ export const getBacklogReport = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// ── GET /api/reports/gstr-export (FEAT-12, v0.9) ──────────────────────────
+// GSTR-1-style CSV from stored Invoice fields AS-IS:
+// invoiceNumber, invoiceDate, customerDetails.customerName/businessName,
+// customerDetails.gstin|taxId (buyer GSTIN), taxableAmount, cgstAmount,
+// sgstAmount, igstAmount, grandTotal. Excludes void invoices (Invoice
+// status enum has no 'cancelled'; void is the dead state, mirroring
+// receivables logic where void is excluded).
+export const getGstrExport = async (req, res) => {
+  try {
+    const match = { status: { $nin: ['void', 'cancelled'] } };
+    const from = req.query.from ? new Date(req.query.from) : null;
+    const to = req.query.to ? new Date(req.query.to) : null;
+    if (from && !Number.isNaN(from.getTime())) match.invoiceDate = { ...match.invoiceDate, $gte: from };
+    if (to && !Number.isNaN(to.getTime())) match.invoiceDate = { ...match.invoiceDate, $lte: to };
+    const invoices = await Invoice.find(match).sort({ invoiceDate: 1, createdAt: 1 }).lean();
+    const headers = ['invoiceNumber','invoiceDate','buyerName','buyerGstin','taxableValue','CGST','SGST','IGST','total'];
+    const rows = invoices.map((inv) => [
+      inv.invoiceNumber,
+      inv.invoiceDate ? new Date(inv.invoiceDate).toISOString().slice(0,10) : '',
+      inv.customerDetails?.customerName || inv.customerDetails?.businessName || '',
+      inv.customerDetails?.gstin || inv.customerDetails?.taxId || '',
+      inv.taxableAmount ?? '',
+      inv.cgstAmount ?? '',
+      inv.sgstAmount ?? '',
+      inv.igstAmount ?? '',
+      inv.grandTotal ?? '',
+    ]);
+    return sendCsv(res, 'gstr-export.csv', headers, rows);
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};

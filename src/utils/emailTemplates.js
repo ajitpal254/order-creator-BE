@@ -204,7 +204,16 @@ export const assistantHandoffTemplate = (payload = {}) => {
   return { subject, text, html };
 };
 
+export const rfqReceivedTemplate = (payload = {}) => {
+  const subject = `New RFQ from ${payload.name || payload.customerName || 'Website'} - H.A. Overseas`;
+  const itemsText = Array.isArray(payload.items) ? payload.items.map((i) => `${i.productName} x ${i.quantity}`).join(', ') : '';
+  const html = wrap('New RFQ received', `<p>A new public RFQ has been submitted.</p><p><strong>Name:</strong> ${esc(payload.name || payload.customerName || '')}</p><p><strong>Email:</strong> ${esc(payload.email || '')}</p>${payload.company ? `<p><strong>Company:</strong> ${esc(payload.company)}</p>` : ''}${payload.message ? `<p><strong>Message:</strong> ${esc(payload.message)}</p>` : ''}${itemsText ? `<p><strong>Items:</strong> ${esc(itemsText)}</p>` : ''}`);
+  const text = `New RFQ from ${payload.name || ''} (${payload.email || ''}). ${payload.message || ''} ${itemsText}`;
+  return { subject, text, html };
+};
+
 export const EMAIL_TEMPLATES = {
+  rfq_received: rfqReceivedTemplate,
   order_received: orderReceivedTemplate,
   order_confirmed: orderConfirmedTemplate,
   order_status_changed: orderStatusChangedTemplate,
