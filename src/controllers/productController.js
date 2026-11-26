@@ -8,6 +8,67 @@ import { parsePagination, paginatedResponse } from '../utils/paginate.js';
 const productSnapshot = (p) =>
   p ? { name: p.name, sku: p.sku, category: p.category, basePrice: p.basePrice } : null;
 
+// FEAT-09 (v0.7): inventory fields may arrive as JSON strings via
+// FormData, so accept either form before validating.
+const parseJsonish = (val) => {
+  if (typeof val === 'string') {
+    try {
+      return JSON.parse(val);
+    } catch {
+      return val;
+    }
+  }
+  return val;
+};
+
+const isBlank = (val) => val === undefined || val === null || val === '';
+
+// Returns an error message string, or null when the FEAT-09 inventory
+// fields present on `body` are all valid. Explicit checks (rather than
+// relying on Mongoose validators) keep the failure a 400 in the
+// controllers' existing style — updateProduct does not run validators.
+const validateInventoryFields = (body) => {
+  for (const field of ['leadTimeDays', 'stockQuantity']) {
+    if (isBlank(body[field])) continue;
+    const num = Number(body[field]);
+    if (!Number.isFinite(num) || num < 0) {
+      return `${field} must be a non-negative number.`;
+    }
+  }
+  if (!isBlank(body.priceBreaks)) {
+    const breaks = parseJsonish(body.priceBreaks);
+    if (!Array.isArray(breaks)) {
+      return 'priceBreaks must be an array of { minQty, unitPrice } entries.';
+    }
+    for (const entry of breaks) {
+      if (!entry || typeof entry !== 'object') {
+        return 'priceBreaks must be an array of { minQty, unitPrice } entries.';
+      }
+      const minQty = Number(entry.minQty);
+      const unitPrice = Number(entry.unitPrice);
+      if (!Number.isFinite(minQty) || minQty < 1) {
+        return 'Each price break requires a minQty of at least 1.';
+      }
+      if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+        return 'Each price break requires a non-negative unitPrice.';
+      }
+    }
+  }
+  return null;
+};
+
+// Normalise priceBreaks to plain { minQty, unitPrice } numbers.
+// Returns undefined when the field was not supplied at all.
+const normalizePriceBreaks = (val) => {
+  if (isBlank(val)) return undefined;
+  const breaks = parseJsonish(val);
+  if (!Array.isArray(breaks)) return undefined;
+  return breaks.map((entry) => ({
+    minQty: Number(entry.minQty),
+    unitPrice: Number(entry.unitPrice),
+  }));
+};
+
 // Public URL for an uploaded file: the storage service's URL when the
 // upload went through it (local driver returns /uploads/<key>, exactly
 // the historical shape), falling back to the legacy local path.
@@ -91,7 +152,16 @@ export const createProduct = async (req, res) => {
       allowedBrands,
       specifications,
       images,
+      leadTimeDays,
+      stockQuantity,
+      availabilityNote,
+      priceBreaks,
     } = req.body;
+
+    const inventoryError = validateInventoryFields(req.body);
+    if (inventoryError) {
+      return res.status(400).json({ success: false, message: inventoryError });
+    }
 
     if (!name || !sku || !category) {
       return res.status(400).json({
@@ -142,6 +212,10 @@ export const createProduct = async (req, res) => {
       allowedColors: parseField(allowedColors),
       allowedBrands: parseField(allowedBrands),
       specifications: parseField(specifications),
+      leadTimeDays: isBlank(leadTimeDays) ? null : Number(leadTimeDays),
+      stockQuantity: isBlank(stockQuantity) ? null : Number(stockQuantity),
+      availabilityNote: typeof availabilityNote === 'string' ? availabilityNote.trim() : '',
+      priceBreaks: normalizePriceBreaks(priceBreaks) ?? [],
       images: finalImages.length > 0 ? finalImages : ['https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=800&q=80'],
     });
 
@@ -181,7 +255,27 @@ export const updateProduct = async (req, res) => {
       return val;
     };
 
+    // FEAT-09 (v0.7): validate + normalise the inventory fields when
+    // supplied (findByIdAndUpdate does not run schema validators here,
+    // so negatives / malformed priceBreaks are rejected explicitly).
+    const inventoryError = validateInventoryFields(req.body);
+    if (inventoryError) {
+      return res.status(400).json({ success: false, message: inventoryError });
+    }
+
     const updates = { ...req.body };
+    if ('leadTimeDays' in updates) {
+      updates.leadTimeDays = isBlank(updates.leadTimeDays) ? null : Number(updates.leadTimeDays);
+    }
+    if ('stockQuantity' in updates) {
+      updates.stockQuantity = isBlank(updates.stockQuantity) ? null : Number(updates.stockQuantity);
+    }
+    if (typeof updates.availabilityNote === 'string') {
+      updates.availabilityNote = updates.availabilityNote.trim();
+    }
+    if ('priceBreaks' in updates) {
+      updates.priceBreaks = normalizePriceBreaks(updates.priceBreaks) ?? [];
+    }
     if (updates.allowedSizes) updates.allowedSizes = parseField(updates.allowedSizes);
     if (updates.allowedFinishes) updates.allowedFinishes = parseField(updates.allowedFinishes);
     if (updates.allowedColors) updates.allowedColors = parseField(updates.allowedColors);
