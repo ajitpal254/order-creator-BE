@@ -1,15 +1,17 @@
 import { AssistantConversation } from '../../models/AssistantConversation.js';
+import { AssistantProposal, serializeProposalBrief } from '../../models/AssistantProposal.js';
 import { executeToolByName, toolSchemas } from './tools.js';
 import { rulesProvider } from './rulesProvider.js';
 import { cloudflareProvider } from './cloudflareProvider.js';
 import { geminiProvider } from './geminiProvider.js';
+import { anthropicProvider } from './anthropicProvider.js';
 import { logger } from '../../utils/logger.js';
 
 /**
  * Assistant service (FEAT-16, v0.7)
  *
  * Env vars (see .env.example):
- *   ASSISTANT_PROVIDER   'rules' (default) | 'cloudflare' | 'gemini'.
+ *   ASSISTANT_PROVIDER   'rules' (default) | 'cloudflare' | 'gemini' | 'anthropic'.
  *                        Unset/unknown => rules, ZERO external calls.
  *   ASSISTANT_MODEL      Model id for the Stage-2 provider.
  *   ASSISTANT_DAILY_CAP  Max user messages per user per day before the
@@ -24,7 +26,12 @@ import { logger } from '../../utils/logger.js';
  * to the rules provider.
  */
 
-const PROVIDERS = { rules: rulesProvider, cloudflare: cloudflareProvider, gemini: geminiProvider };
+const PROVIDERS = {
+  rules: rulesProvider,
+  cloudflare: cloudflareProvider,
+  gemini: geminiProvider,
+  anthropic: anthropicProvider,
+};
 
 export const resolveProviderName = () => {
   const raw = String(process.env.ASSISTANT_PROVIDER || 'rules').toLowerCase().trim();
@@ -82,16 +89,30 @@ export const handleAssistantMessage = async ({ user, message, conversationId }) 
   }
 
   const toolCallsMade = [];
+  // FEAT-16 Stage 3 (v1.0): when a tool result carries a proposalId,
+  // the (serialized) proposal is surfaced on the response so the
+  // client can render a confirm/dismiss affordance. The proposal is
+  // the ONLY write path — tools themselves never create orders.
+  let surfacedProposal = null;
   const executeTool = async (name, args = {}) => {
     toolCallsMade.push({ name, at: new Date() });
-    return executeToolByName(user, name, args);
+    const toolResult = await executeToolByName(user, name, args);
+    if (toolResult?.proposalId) {
+      try {
+        const proposal = await AssistantProposal.findById(toolResult.proposalId).lean();
+        if (proposal) surfacedProposal = serializeProposalBrief(proposal);
+      } catch {
+        // Surfacing is additive — a load failure must not break the reply.
+      }
+    }
+    return toolResult;
   };
 
   const history = [
     ...(conversation.messages || []).map((m) => ({ role: m.role, content: m.content })),
     { role: 'user', content: message },
   ];
-  const schemas = toolSchemas();
+  const schemas = toolSchemas(user);
 
   let result;
   let usedProvider = providerName;
@@ -129,5 +150,6 @@ export const handleAssistantMessage = async ({ user, message, conversationId }) 
     reply,
     chips: result?.chips || [],
     provider: usedProvider,
+    proposal: surfacedProposal,
   };
 };
