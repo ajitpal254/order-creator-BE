@@ -26,6 +26,8 @@ import {
   enqueueOrderShipped,
 } from '../services/outbox.js';
 import { notifyOrderCreated, notifyOrderStatusChanged } from '../services/notify.js';
+import { getRates as getFxRates, convert as convertFx } from '../services/fx.js';
+import { deepCopyItems, saveDraftOrder } from '../utils/draftOrder.js';
 
 // FEAT-01 (v0.4): comms wiring is failure-isolated, mirroring logAudit —
 // an outbox/notification failure must never break the order request.
@@ -262,6 +264,79 @@ export const createOrder = async (req, res) => {
     });
   } catch (error) {
     logger.error('Error creating order', { error: error.message });
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc Reorder — copy an existing order into a fresh Draft
+// @route POST /api/orders/:id/reorder
+export const reorderOrder = async (req, res) => {
+  try {
+    const source = await Order.findById(req.params.id).catch(() => null);
+    if (!source) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    // SEC-01: a non-staff user may only reorder their own orders;
+    // another buyer's order is reported as 404 (not 403). Staff may
+    // reorder any order.
+    const isStaff = STAFF_ROLES.includes(req.user.role);
+    if (!isStaff && source.user.toString() !== req.user._id.toString()) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    // Owner decision: the new Draft belongs to the SOURCE order's owner
+    // (not the requester). For a buyer reordering their own order the
+    // two are identical; for staff reordering on a buyer's behalf the
+    // draft must land in the buyer's account, not the staff member's.
+    // Items and totals are copied as stored — no catalog/tier repricing
+    // (see utils/draftOrder.js). A Draft has no invoice side effects:
+    // invoices are only generated on the Confirmed transition.
+    const newOrder = await saveDraftOrder({
+      userId: source.user,
+      orderType: source.orderType,
+      items: deepCopyItems(source.items),
+      totals: {
+        totalQuantity: source.totalQuantity,
+        subtotalAmount: source.subtotalAmount,
+        discountPercent: source.discountPercent,
+        discountAmount: source.discountAmount,
+        totalAmount: source.totalAmount,
+        estimatedWeightKg: source.estimatedWeightKg,
+        estimatedCartons: source.estimatedCartons,
+      },
+      currency: source.currency,
+      currencyRate: source.currencyRate,
+      incoterm: source.incoterm,
+      customerDetails: source.customerDetails
+        ? {
+            customerName: source.customerDetails.customerName,
+            businessName: source.customerDetails.businessName,
+            country: source.customerDetails.country,
+            phoneNumber: source.customerDetails.phoneNumber,
+            address: source.customerDetails.address,
+            email: source.customerDetails.email,
+          }
+        : undefined,
+      distributorTierSnapshot: source.distributorTierSnapshot,
+      updatedBy: req.user.customerName || req.user.username,
+      note: `Reordered from order #${source.orderNumber} — draft saved`,
+    });
+
+    logger.info(`Order #${source.orderNumber} reordered as draft #${newOrder.orderNumber}`, {
+      orderId: newOrder._id,
+      sourceOrderId: source._id,
+      userId: req.user._id,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: `Draft order #${newOrder.orderNumber} created from order #${source.orderNumber}.`,
+      data: newOrder,
+      order: newOrder,
+    });
+  } catch (error) {
+    logger.error('Error reordering order', { error: error.message });
     return res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -543,6 +618,31 @@ export const updateOrderStatus = async (req, res) => {
     }
 
     await order.save();
+
+    // FEAT-04 (v0.5): lock the FX rate when an order transitions INTO
+    // Confirmed. Additive snapshot only (fxRateLocked / baseCurrency /
+    // baseTotal) — no existing total is recomputed. Failure-isolated:
+    // an FX failure must never break order confirmation, so any error
+    // is logged and the confirmation continues without lock fields.
+    if (status === ORDER_STATES.CONFIRMED && previousStatus !== ORDER_STATES.CONFIRMED) {
+      try {
+        const { rates } = await getFxRates();
+        const orderCurrency = order.currency || 'USD';
+        const lockedRate =
+          orderCurrency === 'USD' ? 1 : convertFx(1, orderCurrency, 'USD', rates);
+        order.fxRateLocked = lockedRate;
+        order.baseCurrency = 'USD';
+        order.baseTotal = parseFloat(
+          convertFx(order.totalAmount || 0, orderCurrency, 'USD', rates).toFixed(2)
+        );
+        await order.save();
+      } catch (fxErr) {
+        logger.error('FX rate lock failed on order confirmation', {
+          error: fxErr.message,
+          orderId: order._id,
+        });
+      }
+    }
 
     // SEC-10: audit the status transition (only when one happened)
     if (status && status !== previousStatus) {

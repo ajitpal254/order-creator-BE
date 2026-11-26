@@ -85,6 +85,25 @@ export const updateOrderStatusSchema = z.object({
   carrierName: z.string().optional(),
 });
 
+// FEAT-02 (v0.5) quote workflow schemas
+export const counterOfferSchema = z.object({
+  amount: z.coerce.number().positive('Counter-offer amount must be greater than zero'),
+  message: z.string().max(1000).optional().default(''),
+});
+
+export const respondCounterOfferSchema = z.object({
+  // Chosen contract: { accept: boolean } (not an action string).
+  accept: z.boolean(),
+  validityDays: z.coerce.number().int().positive().max(365).optional(),
+  quoteValidityDate: z.string().datetime().optional(),
+});
+
+export const acceptQuoteSchema = z.object({});
+
+export const declineQuoteSchema = z.object({
+  reason: z.string().max(1000).optional().default(''),
+});
+
 export const signupSchema = z.object({
   customerName: z.string().min(2, 'Customer name must be at least 2 characters'),
   businessName: z.string().min(2, 'Business name must be at least 2 characters'),
@@ -218,6 +237,53 @@ export const recordPaymentSchema = z.object({
   paymentDate: z.string().optional(),
   referenceNumber: z.string().optional().default(''),
   notes: z.string().optional().default(''),
+});
+
+// FEAT-05 (v0.5) — order templates & address book
+// Template items reuse the order-item shape, extended with the stored
+// totalPrice / price snapshot an order item carries, so a template can
+// snapshot an order's items without losing pricing.
+export const templateItemSchema = orderItemSchema.extend({
+  totalPrice: z.coerce.number().nonnegative().optional(),
+  snapshot: z
+    .object({
+      basePrice: z.coerce.number().optional(),
+      weightKg: z.coerce.number().optional(),
+      pcsPerCarton: z.coerce.number().optional(),
+      tierDiscountPercent: z.coerce.number().optional(),
+      finishSurcharge: z.coerce.number().optional(),
+      laserMarkingCost: z.coerce.number().optional(),
+      packagingCost: z.coerce.number().optional(),
+    })
+    .optional(),
+});
+
+export const createTemplateSchema = z.object({
+  name: z.string().min(1, 'Template name is required'),
+  items: z.array(templateItemSchema).min(1, 'Template must contain at least one item').optional(),
+  fromOrderId: z.string().min(1).optional(),
+});
+
+export const createAddressSchema = z.object({
+  label: z.string().optional().default(''),
+  type: z.enum(['bill-to', 'ship-to']).optional().default('ship-to'),
+  line1: z.string().min(1, 'Address line 1 is required'),
+  line2: z.string().optional().default(''),
+  city: z.string().optional().default(''),
+  state: z.string().optional().default(''),
+  country: z.string().optional().default(''),
+  postalCode: z.string().optional().default(''),
+});
+
+export const updateAddressSchema = z.object({
+  label: z.string().optional(),
+  type: z.enum(['bill-to', 'ship-to']).optional(),
+  line1: z.string().min(1, 'Address line 1 is required').optional(),
+  line2: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  country: z.string().optional(),
+  postalCode: z.string().optional(),
 });
 
 export const voidInvoiceSchema = z.object({

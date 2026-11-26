@@ -11,9 +11,25 @@ import {
   convertQuoteToOrder,
   getBuyerAnalytics,
   retryInvoiceSync,
+  reorderOrder,
 } from '../controllers/orderController.js';
+import {
+  createCounterOffer,
+  respondCounterOffer,
+  acceptQuote,
+  declineQuote,
+  downloadQuotePdf,
+} from '../controllers/quoteController.js';
 import { protect, authorizeRoles } from '../middleware/auth.js';
-import { validate, createOrderSchema, updateOrderStatusSchema } from '../middleware/validate.js';
+import {
+  validate,
+  createOrderSchema,
+  updateOrderStatusSchema,
+  counterOfferSchema,
+  respondCounterOfferSchema,
+  acceptQuoteSchema,
+  declineQuoteSchema,
+} from '../middleware/validate.js';
 
 const router = express.Router();
 
@@ -54,5 +70,35 @@ router.post(
   authorizeRoles(...staffRoles),
   retryInvoiceSync
 );
+// FEAT-05 (v0.5): reorder — owner (or staff) copies an order into a new Draft
+router.post('/:id/reorder', protect, reorderOrder);
+
+// FEAT-02 (v0.5) quote workflow
+router.post(
+  '/:id/counter-offer',
+  protect,
+  validate({ body: counterOfferSchema }),
+  createCounterOffer
+);
+router.post(
+  '/:id/counter-offer/:offerId/respond',
+  protect,
+  authorizeRoles(...staffRoles),
+  validate({ body: respondCounterOfferSchema }),
+  respondCounterOffer
+);
+router.post(
+  '/:id/quote/accept',
+  protect,
+  validate({ body: acceptQuoteSchema }),
+  acceptQuote
+);
+router.post(
+  '/:id/quote/decline',
+  protect,
+  validate({ body: declineQuoteSchema }),
+  declineQuote
+);
+router.get('/:id/quote-pdf', protect, downloadQuotePdf);
 
 export default router;
