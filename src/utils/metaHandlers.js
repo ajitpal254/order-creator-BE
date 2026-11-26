@@ -27,11 +27,13 @@ export const readyHandler = async (req, res) => {
 };
 
 /**
- * OpenAPI spec as JSON. Production gets the same 404 shape as any
- * other unknown route — the spec is a dev aid, not public surface.
+ * OpenAPI spec as JSON. Served ONLY when explicitly enabled with
+ * ENABLE_API_DOCS=true AND not in production — the spec is a dev aid,
+ * not public surface. (Opt-in flag, not just the NODE_ENV check: a
+ * host that forgets NODE_ENV=production must not leak the schema.)
  */
 export const docsHandler = (req, res) => {
-  if (process.env.NODE_ENV === 'production') {
+  if (process.env.NODE_ENV === 'production' || process.env.ENABLE_API_DOCS !== 'true') {
     return res.status(404).json({
       success: false,
       message: `Endpoint not found: ${req.method} ${req.originalUrl}`,
