@@ -74,6 +74,9 @@ export const createOrderSchema = z.object({
   orderType: z.enum(['Order', 'Quote']).optional().default('Order'),
   currency: z.enum(['USD', 'EUR', 'GBP', 'AUD', 'INR', 'CAD']).optional().default('USD'),
   incoterm: z.enum(['FOB', 'CIF', 'EXW']).optional().default('FOB'),
+  // FEAT-10 (v0.9): optional buyer-company attachment; membership is
+  // enforced in createOrder (non-member → 404).
+  companyId: z.string().optional().nullable(),
 });
 
 export const updateOrderStatusSchema = z.object({

@@ -30,6 +30,7 @@ import paymentRoutes from './routes/paymentRoutes.js';
 import { stripeWebhook } from './controllers/paymentController.js';
 import trackingRoutes from './routes/trackingRoutes.js';
 import assistantRoutes from './routes/assistantRoutes.js';
+import companyRoutes from './routes/companyRoutes.js';
 import { startOutboxWorker } from './services/outbox.js';
 import { sanitizeMongoInput } from './middleware/mongoSanitize.js';
 import { jsonBodyParser, urlencodedBodyParser } from './middleware/bodyParsers.js';
@@ -176,6 +177,7 @@ app.use('/api/addresses', addressRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/track', trackingRoutes);
 app.use('/api/assistant', assistantRoutes);
+app.use('/api/companies', companyRoutes);
 
 
 // Root Endpoint & Health Checks

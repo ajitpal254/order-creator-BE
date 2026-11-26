@@ -52,6 +52,38 @@ export const notifyOrderCreated = (order) =>
     link: '/my-orders',
   });
 
+// FEAT-10 (v0.9): company spend approval. When an order over its
+// company's spend limit becomes approvalStatus 'pending', every
+// approver/owner member except the order's creator is notified.
+export const notifyApprovalRequested = (order, recipientIds) =>
+  Promise.all(
+    (recipientIds || []).map((userId) =>
+      notify({
+        user: userId,
+        type: 'order_approval_requested',
+        title: `Approval needed for order #${order?.orderNumber}`,
+        body: `Order #${order?.orderNumber} exceeds the company spend limit and is awaiting approval.`,
+        link: '/my-orders',
+      })
+    )
+  );
+
+// FEAT-10 (v0.9): the order's creator hears the approval outcome.
+export const notifyApprovalDecided = (order, decision) =>
+  notify({
+    user: order?.user,
+    type: decision === 'approved' ? 'order_approval_approved' : 'order_approval_rejected',
+    title:
+      decision === 'approved'
+        ? `Order #${order?.orderNumber} approved`
+        : `Order #${order?.orderNumber} approval rejected`,
+    body:
+      decision === 'approved'
+        ? `Your order #${order?.orderNumber} has been approved and can now be confirmed.`
+        : `Your order #${order?.orderNumber} was rejected${order?.approvalReason ? `: ${order.approvalReason}` : ''}.`,
+    link: '/my-orders',
+  });
+
 export const notifyOrderStatusChanged = (order, newStatus) => {
   const status = newStatus || order?.status;
   // FEAT-11: WhatsApp templates exist for the Confirmed and Shipped

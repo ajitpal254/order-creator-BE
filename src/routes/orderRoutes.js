@@ -13,6 +13,8 @@ import {
   retryInvoiceSync,
   reorderOrder,
   getOrderTrackingLink,
+  approveOrder,
+  rejectOrderApproval,
 } from '../controllers/orderController.js';
 import {
   createCounterOffer,
@@ -81,6 +83,12 @@ router.post(
 );
 // FEAT-05 (v0.5): reorder — owner (or staff) copies an order into a new Draft
 router.post('/:id/reorder', protect, reorderOrder);
+
+// FEAT-10 (v0.9): company spend approval — company approver/owner
+// members (never the order's creator) decide pending approvals;
+// membership/role rules are enforced in the controller.
+router.post('/:id/approve', protect, approveOrder);
+router.post('/:id/reject-approval', protect, rejectOrderApproval);
 
 // FEAT-06 (v0.6): shareable public tracking link — owner or staff only
 router.get('/:id/tracking-link', protect, getOrderTrackingLink);
