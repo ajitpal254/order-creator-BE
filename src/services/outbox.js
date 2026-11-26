@@ -3,6 +3,7 @@ import { User } from '../models/User.js';
 import { sendRawMail } from '../utils/emailService.js';
 import { renderEmailTemplate } from '../utils/emailTemplates.js';
 import { ORDER_STATES } from '../utils/stateMachine.js';
+import { sendOrderConfirmedWhatsApp, sendQuoteReadyWhatsApp } from './messaging.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -200,13 +201,24 @@ export const enqueueOrderReceived = (order, user) =>
     user: orderUserRef(order, user),
   });
 
-export const enqueueOrderConfirmed = (order, user) =>
-  enqueueEmail({
+// FEAT-11 (v0.8): the order-confirmed event also fans out to WhatsApp
+// (inside this service, so the convert-quote call site is unchanged).
+// This helper is the confirmation path for quote conversions; status
+// transitions to Confirmed fan out via notifyOrderStatusChanged in
+// src/services/notify.js instead — the two paths never both fire for
+// one event, so no duplicate MessageLog rows. The messaging service
+// never throws and only records a row for opted-in buyers with a
+// phone, so the email outcome below is unaffected.
+export const enqueueOrderConfirmed = async (order, user) => {
+  const row = await enqueueEmail({
     to: orderRecipient(order, user),
     template: 'order_confirmed',
     payload: orderPayload(order, { status: ORDER_STATES.CONFIRMED }),
     user: orderUserRef(order, user),
   });
+  await sendOrderConfirmedWhatsApp(order, user);
+  return row;
+};
 
 export const enqueueOrderStatusChanged = (order, user, newStatus) =>
   enqueueEmail({
@@ -224,14 +236,19 @@ export const enqueueOrderShipped = (order, user) =>
     user: orderUserRef(order, user),
   });
 
-// Wired as exports now; their call sites land in later releases.
-export const enqueueQuoteReady = (order, user) =>
-  enqueueEmail({
+// FEAT-11 (v0.8): quote-ready also fans out to WhatsApp (template
+// quote_ready_v1) under the same opt-in/phone gate as the other
+// events; see enqueueOrderConfirmed above.
+export const enqueueQuoteReady = async (order, user) => {
+  const row = await enqueueEmail({
     to: orderRecipient(order, user),
     template: 'quote_ready',
     payload: orderPayload(order),
     user: orderUserRef(order, user),
   });
+  await sendQuoteReadyWhatsApp(order, user);
+  return row;
+};
 
 // Wired as an export now; the payment call site lives in the invoice
 // code path, which is off-limits in this release.
