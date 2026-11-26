@@ -12,6 +12,7 @@ import {
   getBuyerAnalytics,
   retryInvoiceSync,
   reorderOrder,
+  getOrderTrackingLink,
 } from '../controllers/orderController.js';
 import {
   createCounterOffer,
@@ -72,6 +73,9 @@ router.post(
 );
 // FEAT-05 (v0.5): reorder — owner (or staff) copies an order into a new Draft
 router.post('/:id/reorder', protect, reorderOrder);
+
+// FEAT-06 (v0.6): shareable public tracking link — owner or staff only
+router.get('/:id/tracking-link', protect, getOrderTrackingLink);
 
 // FEAT-02 (v0.5) quote workflow
 router.post(
