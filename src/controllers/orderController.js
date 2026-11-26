@@ -19,6 +19,23 @@ import { createSearchRegex } from '../utils/escapeRegExp.js';
 import { generateOrderNumber } from '../utils/idGenerator.js';
 import { logAudit } from '../utils/audit.js';
 import { parsePagination, paginatedResponse } from '../utils/paginate.js';
+import {
+  enqueueOrderReceived,
+  enqueueOrderConfirmed,
+  enqueueOrderStatusChanged,
+  enqueueOrderShipped,
+} from '../services/outbox.js';
+import { notifyOrderCreated, notifyOrderStatusChanged } from '../services/notify.js';
+
+// FEAT-01 (v0.4): comms wiring is failure-isolated, mirroring logAudit —
+// an outbox/notification failure must never break the order request.
+const safeComms = async (fn, label) => {
+  try {
+    await fn();
+  } catch (err) {
+    logger.error(`Comms wiring failed (${label})`, { error: err.message });
+  }
+};
 
 // Staff roles (mirrors STAFF_ROLES in invoiceController.js / staffRoles in routes):
 // holders of these roles act on any user's orders; everyone else ('user'/'buyer')
@@ -227,6 +244,10 @@ export const createOrder = async (req, res) => {
       sendAdminOrderNotificationEmail({ order }).catch((err) =>
         logger.error('Failed to send admin order notification', { error: err.message })
       );
+      // FEAT-01: outbox email + in-app notification, same condition as
+      // the direct confirmation email above (non-Draft submissions).
+      await safeComms(() => enqueueOrderReceived(order, req.user), 'enqueueOrderReceived');
+      await safeComms(() => notifyOrderCreated(order), 'notifyOrderCreated');
     }
 
     return res.status(201).json({
@@ -275,6 +296,9 @@ export const convertQuoteToOrder = async (req, res) => {
       newStatus: ORDER_STATES.CONFIRMED,
       note: 'Your quotation has been approved and converted to a Confirmed Order.',
     }).catch((err) => logger.error('Quote conversion email failed', { error: err.message }));
+
+    // FEAT-01: outbox confirmation email for the converted order.
+    await safeComms(() => enqueueOrderConfirmed(order, order.user), 'enqueueOrderConfirmed');
 
     return res.status(200).json({
       success: true,
@@ -529,6 +553,21 @@ export const updateOrderStatus = async (req, res) => {
         before: { status: previousStatus },
         after: { status: order.status },
       });
+
+      // FEAT-01: outbox email + in-app notification for the transition;
+      // a move to Shipped additionally enqueues the shipped email
+      // (carrier + tracking are on the order by this point).
+      await safeComms(
+        () => enqueueOrderStatusChanged(order, order.user, order.status),
+        'enqueueOrderStatusChanged'
+      );
+      await safeComms(
+        () => notifyOrderStatusChanged(order, order.status),
+        'notifyOrderStatusChanged'
+      );
+      if (order.status === ORDER_STATES.SHIPPED) {
+        await safeComms(() => enqueueOrderShipped(order, order.user), 'enqueueOrderShipped');
+      }
     }
 
     logger.info(`Order #${order.orderNumber} status transitioned to [${order.status}]`, {

@@ -1,6 +1,6 @@
 {
   "name": "order-creator-be",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Backend API for H.A. Overseas Order Creator",
   "main": "src/server.js",
   "type": "module",

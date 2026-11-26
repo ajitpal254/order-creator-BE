@@ -158,12 +158,32 @@ describe('QOL-05 — OpenAPI spec', () => {
     expect(spec.components.schemas.UpdateOrderStatus.properties).toHaveProperty('status');
   });
 
-  it('GET /api/docs returns 200 + the spec in non-production', async () => {
-    const res = await request(app).get('/api/docs');
-    expect(res.status).toBe(200);
-    expect(res.body.openapi).toMatch(/^3\./);
-    expect(res.body.paths).toHaveProperty('/orders');
-    expect(res.body.paths).toHaveProperty('/products/{id}');
+  it('GET /api/docs returns 200 + the spec when explicitly enabled outside production', async () => {
+    const prevFlag = process.env.ENABLE_API_DOCS;
+    process.env.ENABLE_API_DOCS = 'true';
+    try {
+      const res = await request(app).get('/api/docs');
+      expect(res.status).toBe(200);
+      expect(res.body.openapi).toMatch(/^3\./);
+      expect(res.body.paths).toHaveProperty('/orders');
+      expect(res.body.paths).toHaveProperty('/products/{id}');
+    } finally {
+      if (prevFlag === undefined) delete process.env.ENABLE_API_DOCS;
+      else process.env.ENABLE_API_DOCS = prevFlag;
+    }
+  });
+
+  it('GET /api/docs 404s when ENABLE_API_DOCS is not set (even outside production)', async () => {
+    const prevFlag = process.env.ENABLE_API_DOCS;
+    delete process.env.ENABLE_API_DOCS;
+    try {
+      const res = await request(app).get('/api/docs');
+      expect(res.status).toBe(404);
+      expect(res.body.success).toBe(false);
+    } finally {
+      if (prevFlag === undefined) delete process.env.ENABLE_API_DOCS;
+      else process.env.ENABLE_API_DOCS = prevFlag;
+    }
   });
 
   it('GET /api/docs 404s in production', async () => {
