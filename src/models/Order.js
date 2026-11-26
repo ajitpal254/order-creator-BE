@@ -209,6 +209,37 @@ const orderSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    // FEAT-10 (v0.9): buyer company accounts + spend approval.
+    // company is null for personal orders. When an order is placed
+    // under a company whose spendLimit is set and the order's stored
+    // totalAmount exceeds it, approvalStatus becomes 'pending' and the
+    // order cannot transition to Confirmed until a company approver /
+    // owner (not the creator) approves it; 'rejected' also blocks
+    // confirmation (see the guard in orderController.updateOrderStatus).
+    company: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Company',
+      default: null,
+      index: true,
+    },
+    approvalStatus: {
+      type: String,
+      enum: ['none', 'pending', 'approved', 'rejected'],
+      default: 'none',
+    },
+    approvalBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    approvalAt: {
+      type: Date,
+      default: null,
+    },
+    approvalReason: {
+      type: String,
+      default: '',
+    },
     // FEAT-02 (v0.5) quote workflow — additive fields, only meaningful
     // when orderType === 'Quote'. quoteStatus is deliberately separate
     // from the order `status` state machine: the state machine has no

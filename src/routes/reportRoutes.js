@@ -4,6 +4,7 @@ import {
   getRevenueReport,
   getReceivablesAgeing,
   getBacklogReport,
+  getGstrExport,
 } from '../controllers/reportController.js';
 
 const router = express.Router();
@@ -14,5 +15,6 @@ router.use(protect, adminOnly);
 router.get('/revenue', getRevenueReport);
 router.get('/receivables-ageing', getReceivablesAgeing);
 router.get('/backlog', getBacklogReport);
+router.get('/gstr-export', getGstrExport);
 
 export default router;

@@ -30,6 +30,9 @@ import paymentRoutes from './routes/paymentRoutes.js';
 import { stripeWebhook } from './controllers/paymentController.js';
 import trackingRoutes from './routes/trackingRoutes.js';
 import assistantRoutes from './routes/assistantRoutes.js';
+import companyRoutes from './routes/companyRoutes.js';
+import gstRoutes from './routes/gstRoutes.js';
+import publicRoutes from './routes/publicRoutes.js';
 import { startOutboxWorker } from './services/outbox.js';
 import { sanitizeMongoInput } from './middleware/mongoSanitize.js';
 import { jsonBodyParser, urlencodedBodyParser } from './middleware/bodyParsers.js';
@@ -166,6 +169,8 @@ app.use('/api/attributes', attributeRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/invoices', invoiceRoutes);
+app.use('/api/invoices', gstRoutes);
+app.use('/api/public', publicRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/reports', reportRoutes);
@@ -176,6 +181,7 @@ app.use('/api/addresses', addressRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/track', trackingRoutes);
 app.use('/api/assistant', assistantRoutes);
+app.use('/api/companies', companyRoutes);
 
 
 // Root Endpoint & Health Checks

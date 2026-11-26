@@ -27,7 +27,13 @@ import {
   enqueueOrderStatusChanged,
   enqueueOrderShipped,
 } from '../services/outbox.js';
-import { notifyOrderCreated, notifyOrderStatusChanged } from '../services/notify.js';
+import {
+  notifyOrderCreated,
+  notifyOrderStatusChanged,
+  notifyApprovalRequested,
+  notifyApprovalDecided,
+} from '../services/notify.js';
+import { Company, CompanyMember } from '../models/Company.js';
 import { getRates as getFxRates, convert as convertFx } from '../services/fx.js';
 import { deepCopyItems, saveDraftOrder } from '../utils/draftOrder.js';
 
@@ -71,6 +77,7 @@ export const createOrder = async (req, res) => {
       orderType = 'Order',
       incoterm = 'FOB',
       currency = 'USD',
+      companyId = null,
     } = req.body;
 
     const idempotencyKey = req.headers['idempotency-key'] || req.body.idempotencyKey;
@@ -94,6 +101,20 @@ export const createOrder = async (req, res) => {
         success: false,
         message: 'Your order must contain at least one item.',
       });
+    }
+
+    // FEAT-10 (v0.9): optional company attachment. The caller must be
+    // a member of the company; a non-member (or a nonexistent company)
+    // gets 404 so company IDs cannot be probed (SEC-01 pattern).
+    let company = null;
+    if (companyId) {
+      company = await Company.findById(companyId).catch(() => null);
+      const membership = company
+        ? await CompanyMember.findOne({ company: company._id, user: req.user._id })
+        : null;
+      if (!company || !membership) {
+        return res.status(404).json({ success: false, message: 'Company not found' });
+      }
     }
 
     const userTier = req.user.distributorTier || 'Standard';
@@ -180,6 +201,17 @@ export const createOrder = async (req, res) => {
 
     const initialStatus = status === ORDER_STATES.DRAFT ? ORDER_STATES.DRAFT : ORDER_STATES.SUBMITTED;
 
+    // FEAT-10 (v0.9): spend approval is decided from the order's
+    // canonical stored total (totalAmount, computed above by the
+    // existing pricing path — never recomputed here). A company with
+    // spendLimit === null has no approval gate; otherwise an order
+    // strictly over the limit starts life 'pending'.
+    const storedTotalAmount = parseFloat(totalAmount.toFixed(2));
+    const approvalStatus =
+      company && company.spendLimit != null && storedTotalAmount > company.spendLimit
+        ? 'pending'
+        : 'none';
+
     // SEC-12: generate the order number from the atomic counter and
     // save; on a duplicate-key error (11000 — e.g. a legacy random
     // number already occupies the next counter slot) draw the next
@@ -200,6 +232,8 @@ export const createOrder = async (req, res) => {
       discountPercent: tierDiscountPercent * 100,
       discountAmount,
       totalAmount: parseFloat(totalAmount.toFixed(2)),
+      company: company ? company._id : null,
+      approvalStatus,
       distributorTierSnapshot: userTier,
       currency,
       currencyRate: currencyMultiplier,
@@ -252,6 +286,20 @@ export const createOrder = async (req, res) => {
       // the direct confirmation email above (non-Draft submissions).
       await safeComms(() => enqueueOrderReceived(order, req.user), 'enqueueOrderReceived');
       await safeComms(() => notifyOrderCreated(order), 'notifyOrderCreated');
+
+      // FEAT-10 (v0.9): an over-limit company order needs approval —
+      // notify every approver/owner member except the order's creator.
+      if (approvalStatus === 'pending' && company) {
+        const approverMembers = await CompanyMember.find({
+          company: company._id,
+          role: { $in: ['approver', 'owner'] },
+          user: { $ne: req.user._id },
+        });
+        await safeComms(
+          () => notifyApprovalRequested(order, approverMembers.map((m) => m.user)),
+          'notifyApprovalRequested'
+        );
+      }
     }
 
     return res.status(201).json({
@@ -578,6 +626,26 @@ export const updateOrderStatus = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
+    // FEAT-10 (v0.9): company spend-approval guard. An order whose
+    // approval is still 'pending' — or was 'rejected' — cannot be
+    // Confirmed; approval must be resolved first via
+    // POST /api/orders/:id/approve|reject-approval. Every other
+    // transition, and orders with approvalStatus 'none'/'approved',
+    // are unaffected.
+    if (
+      status === ORDER_STATES.CONFIRMED &&
+      (order.approvalStatus === 'pending' || order.approvalStatus === 'rejected')
+    ) {
+      return res.status(422).json({
+        success: false,
+        code: 'APPROVAL_REQUIRED',
+        message:
+          order.approvalStatus === 'rejected'
+            ? `Order #${order.orderNumber} was rejected in company approval and cannot be confirmed.`
+            : `Order #${order.orderNumber} exceeds the company spend limit and requires approval before it can be confirmed.`,
+      });
+    }
+
     // SEC-10: remember the pre-transition status for the audit row.
     const previousStatus = order.status;
 
@@ -891,6 +959,123 @@ export const getOrderStats = async (req, res) => {
       },
     });
   } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// FEAT-10 (v0.9): shared loader for the company spend-approval
+// decision endpoints. Sends the error response and returns null when
+// the caller may not decide: order missing / no company / approval not
+// pending → 400/404 as below; not a company member → 404 (SEC-01
+// pattern, don't leak); member without approver/owner role → 403;
+// the order's own creator → 403 (no self-approval).
+const loadApprovableOrder = async (req, res) => {
+  const order = await Order.findById(req.params.id).catch(() => null);
+  if (!order) {
+    res.status(404).json({ success: false, message: 'Order not found' });
+    return null;
+  }
+  if (!order.company || order.approvalStatus !== 'pending') {
+    res.status(400).json({
+      success: false,
+      message: 'This order is not awaiting company approval.',
+    });
+    return null;
+  }
+  const membership = await CompanyMember.findOne({
+    company: order.company,
+    user: req.user._id,
+  });
+  if (!membership) {
+    res.status(404).json({ success: false, message: 'Order not found' });
+    return null;
+  }
+  if (!['approver', 'owner'].includes(membership.role)) {
+    res.status(403).json({
+      success: false,
+      message: 'Only company approvers or owners can decide spend approvals.',
+    });
+    return null;
+  }
+  if (order.user.toString() === req.user._id.toString()) {
+    res.status(403).json({
+      success: false,
+      message: 'You cannot approve your own order.',
+    });
+    return null;
+  }
+  return order;
+};
+
+// @desc Approve a company order that is pending spend approval
+// @route POST /api/orders/:id/approve
+export const approveOrder = async (req, res) => {
+  try {
+    const order = await loadApprovableOrder(req, res);
+    if (!order) return;
+
+    order.approvalStatus = 'approved';
+    order.approvalBy = req.user._id;
+    order.approvalAt = new Date();
+    order.approvalReason = '';
+    await order.save();
+
+    await logAudit(req, {
+      action: 'order.approval.approve',
+      entityType: 'Order',
+      entityId: order._id,
+      before: { approvalStatus: 'pending' },
+      after: { approvalStatus: 'approved', approvalBy: req.user._id.toString() },
+    });
+    await safeComms(() => notifyApprovalDecided(order, 'approved'), 'notifyApprovalDecided');
+
+    return res.status(200).json({
+      success: true,
+      message: `Order #${order.orderNumber} approved.`,
+      data: order,
+      order,
+    });
+  } catch (error) {
+    logger.error('Error approving order', { error: error.message });
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc Reject a company order that is pending spend approval
+// @route POST /api/orders/:id/reject-approval
+export const rejectOrderApproval = async (req, res) => {
+  try {
+    const { reason } = req.body || {};
+    if (!reason || !String(reason).trim()) {
+      return res.status(400).json({ success: false, message: 'A reason is required to reject an approval.' });
+    }
+
+    const order = await loadApprovableOrder(req, res);
+    if (!order) return;
+
+    order.approvalStatus = 'rejected';
+    order.approvalBy = req.user._id;
+    order.approvalAt = new Date();
+    order.approvalReason = String(reason).trim();
+    await order.save();
+
+    await logAudit(req, {
+      action: 'order.approval.reject',
+      entityType: 'Order',
+      entityId: order._id,
+      before: { approvalStatus: 'pending' },
+      after: { approvalStatus: 'rejected', approvalBy: req.user._id.toString(), approvalReason: order.approvalReason },
+    });
+    await safeComms(() => notifyApprovalDecided(order, 'rejected'), 'notifyApprovalDecided');
+
+    return res.status(200).json({
+      success: true,
+      message: `Order #${order.orderNumber} approval rejected.`,
+      data: order,
+      order,
+    });
+  } catch (error) {
+    logger.error('Error rejecting order approval', { error: error.message });
     return res.status(500).json({ success: false, message: error.message });
   }
 };

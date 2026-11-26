@@ -1,6 +1,8 @@
 import express from 'express';
 import { AuditLog } from '../models/AuditLog.js';
-import { protect, adminOnly } from '../middleware/auth.js';
+import { protect, adminOnly, authorizeRoles } from '../middleware/auth.js';
+import { listRfq, updateRfqStatus } from '../controllers/rfqController.js';
+const STAFF_ROLES = ['admin','sales_manager','production_supervisor','qc_inspector','shipping_officer','super_admin'];
 
 const router = express.Router();
 
@@ -39,5 +41,8 @@ router.get('/audit-logs', protect, adminOnly, async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 });
+
+router.get('/rfq', protect, authorizeRoles(...STAFF_ROLES), listRfq);
+router.patch('/rfq/:id', protect, authorizeRoles(...STAFF_ROLES), updateRfqStatus);
 
 export default router;
