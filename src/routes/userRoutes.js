@@ -2,6 +2,7 @@ import express from 'express';
 import { User } from '../models/User.js';
 import { protect, adminOnly } from '../middleware/auth.js';
 import { createSearchRegex } from '../utils/escapeRegExp.js';
+import { logAudit } from '../utils/audit.js';
 
 const router = express.Router();
 
@@ -53,13 +54,75 @@ router.patch('/:id/toggle-status', protect, adminOnly, async (req, res) => {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
+    const before = { isActive: user.isActive };
     user.isActive = !user.isActive;
     await user.save();
+
+    // SEC-10: audit the status change
+    await logAudit(req, {
+      action: 'user.status.toggle',
+      entityType: 'User',
+      entityId: user._id,
+      before,
+      after: { isActive: user.isActive },
+    });
 
     return res.status(200).json({
       success: true,
       message: `User account is now ${user.isActive ? 'Active' : 'Suspended'}`,
       isActive: user.isActive,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// @desc Change a user's role (Admin)
+// @route PATCH /api/users/:id/role
+// NOTE (SEC-10): no role-change endpoint existed before v0.3 — roles
+// were only ever set at signup/seed time, so there was no mutation
+// point to audit. This endpoint is that point; every change is
+// written to the audit log with before/after roles.
+const VALID_ROLES = [
+  'user',
+  'buyer',
+  'admin',
+  'sales_manager',
+  'production_supervisor',
+  'qc_inspector',
+  'shipping_officer',
+  'super_admin',
+];
+
+router.patch('/:id/role', protect, adminOnly, async (req, res) => {
+  try {
+    const { role } = req.body || {};
+    if (!VALID_ROLES.includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid role. Must be one of: ${VALID_ROLES.join(', ')}`,
+      });
+    }
+
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    const before = { role: user.role };
+    user.role = role;
+    await user.save();
+
+    await logAudit(req, {
+      action: 'user.role.change',
+      entityType: 'User',
+      entityId: user._id,
+      before,
+      after: { role: user.role },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `User role is now ${user.role}`,
+      data: { _id: user._id, role: user.role },
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });

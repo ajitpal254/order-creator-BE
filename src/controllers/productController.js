@@ -1,11 +1,23 @@
 import { Product } from '../models/Product.js';
 import { createSearchRegex } from '../utils/escapeRegExp.js';
+import { logAudit } from '../utils/audit.js';
+import { parsePagination, paginatedResponse } from '../utils/paginate.js';
+
+// Small before/after snapshot for audit rows (SEC-10) — enough to see
+// what changed without duplicating the whole document.
+const productSnapshot = (p) =>
+  p ? { name: p.name, sku: p.sku, category: p.category, basePrice: p.basePrice } : null;
+
+// Public URL for an uploaded file: the storage service's URL when the
+// upload went through it (local driver returns /uploads/<key>, exactly
+// the historical shape), falling back to the legacy local path.
+const uploadedFileUrl = (file) => file.storageUrl || `/uploads/${file.filename}`;
 
 // @desc Get all products with filters
 // @route GET /api/products
 export const getProducts = async (req, res) => {
   try {
-    const { category, brand, finish, search, limit = 100, page = 1 } = req.query;
+    const { category, brand, finish, search } = req.query;
     const filter = { 
       isActive: true,
       sku: { $exists: true, $ne: null }
@@ -30,21 +42,16 @@ export const getProducts = async (req, res) => {
       ];
     }
 
-    const pageNum = Math.max(1, parseInt(page, 10) || 1);
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 100));
-    const skip = (pageNum - 1) * limitNum;
+    // QOL-12: standard envelope via the shared helper (same defaults/caps
+    // as before: page >= 1, limit default 100, cap 100). The old `pages`
+    // field is dropped in favour of the standard `count`/`limit` fields.
+    const { page, limit, skip } = parsePagination(req);
     const [products, total] = await Promise.all([
-      Product.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limitNum),
+      Product.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
       Product.countDocuments(filter),
     ]);
 
-    return res.status(200).json({
-      success: true,
-      total,
-      page: pageNum,
-      pages: Math.ceil(total / limitNum),
-      data: products,
-    });
+    return paginatedResponse(res, { items: products, total, page, limit });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
@@ -104,7 +111,7 @@ export const createProduct = async (req, res) => {
     // Process uploaded files if any
     let finalImages = Array.isArray(images) ? [...images] : [];
     if (req.files && req.files.length > 0) {
-      const uploadedUrls = req.files.map((file) => `/uploads/${file.filename}`);
+      const uploadedUrls = req.files.map(uploadedFileUrl);
       finalImages = [...finalImages, ...uploadedUrls];
     }
 
@@ -140,6 +147,15 @@ export const createProduct = async (req, res) => {
 
     await product.save();
 
+    // SEC-10: audit the creation
+    await logAudit(req, {
+      action: 'product.create',
+      entityType: 'Product',
+      entityId: product._id,
+      before: null,
+      after: productSnapshot(product),
+    });
+
     return res.status(201).json({
       success: true,
       message: 'Product created successfully',
@@ -173,15 +189,25 @@ export const updateProduct = async (req, res) => {
     if (updates.specifications) updates.specifications = parseField(updates.specifications);
 
     if (req.files && req.files.length > 0) {
-      const uploadedUrls = req.files.map((file) => `/uploads/${file.filename}`);
+      const uploadedUrls = req.files.map(uploadedFileUrl);
       let existingImages = updates.images ? (Array.isArray(updates.images) ? updates.images : [updates.images]) : [];
       updates.images = [...existingImages, ...uploadedUrls];
     }
 
+    const beforeProduct = await Product.findById(req.params.id).lean();
     const product = await Product.findByIdAndUpdate(req.params.id, updates, { new: true });
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
+
+    // SEC-10: audit the update
+    await logAudit(req, {
+      action: 'product.update',
+      entityType: 'Product',
+      entityId: product._id,
+      before: productSnapshot(beforeProduct),
+      after: productSnapshot(product),
+    });
 
     return res.status(200).json({
       success: true,
@@ -201,6 +227,16 @@ export const deleteProduct = async (req, res) => {
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
+
+    // SEC-10: audit the deletion
+    await logAudit(req, {
+      action: 'product.delete',
+      entityType: 'Product',
+      entityId: product._id,
+      before: productSnapshot(product),
+      after: null,
+    });
+
     return res.status(200).json({ success: true, message: 'Product deleted successfully' });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
@@ -213,7 +249,7 @@ export const uploadImage = (req, res) => {
   if (!req.file) {
     return res.status(400).json({ success: false, message: 'No image uploaded.' });
   }
-  const fileUrl = `/uploads/${req.file.filename}`;
+  const fileUrl = uploadedFileUrl(req.file);
   return res.status(200).json({
     success: true,
     url: fileUrl,

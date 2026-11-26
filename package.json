@@ -1,6 +1,6 @@
 {
   "name": "order-creator-be",
-  "version": "1.0.0",
+  "version": "0.3.0",
   "description": "Backend API for H.A. Overseas Order Creator",
   "main": "src/server.js",
   "type": "module",
@@ -10,31 +10,37 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "docs:openapi": "node scripts/generate-openapi.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1178.0",
+    "@sentry/node": "^11.18.0",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "express-rate-limit": "^7.5.0",
+    "express-rate-limit": "^8.7.5",
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.13.0",
-    "multer": "^1.4.5-lts.1",
+    "multer": "^2.5.0",
     "nodemailer": "^9.1.1",
     "pdfkit": "^0.16.0",
+    "pino": "^10.4.0",
     "zod": "^4.5.4"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.2.4",
+    "@commitlint/config-conventional": "^21.2.4",
     "@eslint/js": "^10.0.1",
-    "@vitest/coverage-v8": "^5.0.1",
+    "@vitest/coverage-v8": "^5.1.1",
     "eslint": "^10.15.0",
     "globals": "^17.14.0",
     "mongodb-memory-server": "^11.3.0",
     "prettier": "^3.10.1",
-    "supertest": "^7.3.0",
-    "vitest": "^5.0.1"
+    "supertest": "^7.3.2",
+    "vitest": "^5.1.1"
   }
 }

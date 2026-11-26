@@ -1,4 +1,5 @@
 import { logger } from '../utils/logger.js';
+import { captureException } from '../utils/sentry.js';
 
 /**
  * Global error handler (SEC-05).
@@ -15,6 +16,8 @@ export const isCorsError = (err) =>
   typeof err?.message === 'string' && err.message.startsWith('CORS policy violation');
 
 export const globalErrorHandler = (err, req, res, next) => {
+  // QOL-06: forward to Sentry only when it was initialised (SENTRY_DSN set).
+  captureException(err);
   logger.error('Unhandled Global Error', {
     requestId: req.id,
     error: err.message,

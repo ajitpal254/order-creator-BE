@@ -1,0 +1,32 @@
+# CI — copy this file to .github/workflows/ci.yml (see README.md in this
+# folder for why it does not live there directly).
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # package.json declares no "engines" field; the codebase targets
+      # the current Node LTS line used in production (Render/Docker
+      # use Node 24), so CI pins 24.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # `npm run lint` is a real ESLint run (QOL-02 flat config) and is
+      # allowed to fail the build.
+      - run: npm run lint
+
+      # Tests use mongodb-memory-server, so no external Mongo service
+      # is required in CI.
+      - run: npm test

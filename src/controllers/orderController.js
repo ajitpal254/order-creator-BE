@@ -17,6 +17,8 @@ import {
 import { calculateInvoiceTotals } from '../utils/taxCalculator.js';
 import { createSearchRegex } from '../utils/escapeRegExp.js';
 import { generateOrderNumber } from '../utils/idGenerator.js';
+import { logAudit } from '../utils/audit.js';
+import { parsePagination, paginatedResponse } from '../utils/paginate.js';
 
 // Staff roles (mirrors STAFF_ROLES in invoiceController.js / staffRoles in routes):
 // holders of these roles act on any user's orders; everyone else ('user'/'buyer')
@@ -299,8 +301,14 @@ export const getMyOrders = async (req, res) => {
       filter.orderType = orderType;
     }
 
-    const orders = await Order.find(filter).sort({ createdAt: -1 });
-    return res.status(200).json({ success: true, count: orders.length, data: orders });
+    // QOL-12: standard paginated envelope (was {success,count,data} with
+    // no pagination). Same filter and ordering as before.
+    const { page, limit, skip } = parsePagination(req);
+    const [orders, total] = await Promise.all([
+      Order.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      Order.countDocuments(filter),
+    ]);
+    return paginatedResponse(res, { items: orders, total, page, limit });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
@@ -462,6 +470,9 @@ export const updateOrderStatus = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
+    // SEC-10: remember the pre-transition status for the audit row.
+    const previousStatus = order.status;
+
     if (status) {
       const validation = validateStateTransition(
         order.status,
@@ -508,6 +519,17 @@ export const updateOrderStatus = async (req, res) => {
     }
 
     await order.save();
+
+    // SEC-10: audit the status transition (only when one happened)
+    if (status && status !== previousStatus) {
+      await logAudit(req, {
+        action: 'order.status.change',
+        entityType: 'Order',
+        entityId: order._id,
+        before: { status: previousStatus },
+        after: { status: order.status },
+      });
+    }
 
     logger.info(`Order #${order.orderNumber} status transitioned to [${order.status}]`, {
       orderId: order._id,

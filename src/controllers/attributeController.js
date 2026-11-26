@@ -1,4 +1,21 @@
 import { Category, Finish, Color, Brand, Size } from '../models/Attributes.js';
+import { parsePagination, paginatedResponse } from '../utils/paginate.js';
+
+// QOL-12: the five master-data sub-lists below share one paginated
+// implementation so they all emit the standard envelope
+// {success,count,total,page,limit,data} with their original ordering.
+const paginatedList = (Model, sort) => async (req, res) => {
+  try {
+    const { page, limit, skip } = parsePagination(req);
+    const [data, total] = await Promise.all([
+      Model.find().sort(sort).skip(skip).limit(limit),
+      Model.countDocuments(),
+    ]);
+    return paginatedResponse(res, { items: data, total, page, limit });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
 
 // @desc Get all master attributes (Public / User / Admin)
 // @route GET /api/attributes
@@ -28,14 +45,7 @@ export const getAllAttributes = async (req, res) => {
 };
 
 // ==================== FINISHES ====================
-export const getFinishes = async (req, res) => {
-  try {
-    const data = await Finish.find().sort({ createdAt: -1 });
-    res.status(200).json({ success: true, data });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-};
+export const getFinishes = paginatedList(Finish, { createdAt: -1 });
 
 export const addFinish = async (req, res) => {
   try {
@@ -69,14 +79,7 @@ export const deleteFinish = async (req, res) => {
 };
 
 // ==================== COLORS ====================
-export const getColors = async (req, res) => {
-  try {
-    const data = await Color.find().sort({ createdAt: -1 });
-    res.status(200).json({ success: true, data });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-};
+export const getColors = paginatedList(Color, { createdAt: -1 });
 
 export const addColor = async (req, res) => {
   try {
@@ -110,14 +113,7 @@ export const deleteColor = async (req, res) => {
 };
 
 // ==================== BRANDS ====================
-export const getBrands = async (req, res) => {
-  try {
-    const data = await Brand.find().sort({ createdAt: -1 });
-    res.status(200).json({ success: true, data });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-};
+export const getBrands = paginatedList(Brand, { createdAt: -1 });
 
 export const addBrand = async (req, res) => {
   try {
@@ -151,14 +147,7 @@ export const deleteBrand = async (req, res) => {
 };
 
 // ==================== SIZES ====================
-export const getSizes = async (req, res) => {
-  try {
-    const data = await Size.find().sort({ createdAt: -1 });
-    res.status(200).json({ success: true, data });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-};
+export const getSizes = paginatedList(Size, { createdAt: -1 });
 
 export const addSize = async (req, res) => {
   try {
@@ -192,14 +181,7 @@ export const deleteSize = async (req, res) => {
 };
 
 // ==================== CATEGORIES ====================
-export const getCategories = async (req, res) => {
-  try {
-    const data = await Category.find().sort({ name: 1 });
-    res.status(200).json({ success: true, data });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-};
+export const getCategories = paginatedList(Category, { name: 1 });
 
 export const addCategory = async (req, res) => {
   try {
