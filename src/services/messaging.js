@@ -99,6 +99,48 @@ export const metaWhatsAppAdapter = {
     }
     return { messageId: data?.messages?.[0]?.id || null };
   },
+
+  // FEAT-16 Stage 4b (v1.0): free-form text message (used by the
+  // WhatsApp assistant channel for replies inside the 24h window).
+  async sendText({ to, body }) {
+    const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    const url = `${GRAPH_API_BASE}/${GRAPH_API_VERSION}/${phoneNumberId}/messages`;
+    const payload = {
+      messaging_product: 'whatsapp',
+      to: normalizePhone(to),
+      type: 'text',
+      text: { body: String(body) },
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      let detail = '';
+      try {
+        detail = (await response.text()).slice(0, 300);
+      } catch {
+        // Body unreadable — the status alone is the recorded error.
+      }
+      throw new Error(
+        `WhatsApp provider error: HTTP ${response.status}${detail ? ` — ${detail}` : ''}`
+      );
+    }
+
+    let data = null;
+    try {
+      data = await response.json();
+    } catch {
+      // A 200 with an unparseable body still counts as accepted.
+    }
+    return { messageId: data?.messages?.[0]?.id || null };
+  },
 };
 
 // The active provider. Only 'meta' exists today; SMS is future work
@@ -182,6 +224,71 @@ export const sendWhatsAppTemplate = async ({ user, template, parameters = [] } =
   } catch (err) {
     // Last-resort guard: a logging failure must not break the caller.
     logger.error('WhatsApp messaging failed unexpectedly', { error: err.message, template });
+    return null;
+  }
+};
+
+/**
+ * sendWhatsAppText({ to | user, body }) — free-form text send
+ * (FEAT-16 Stage 4b, v1.0), following the same contract as
+ * sendWhatsAppTemplate: env-gated on the adapter being configured,
+ * NEVER throws. Unlike template sends there is no opt-in gate: this
+ * is used to REPLY inside a conversation the user started (the
+ * WhatsApp assistant channel). When a recipient user is known, the
+ * attempt is recorded in MessageLog under template 'assistant_text'
+ * ('simulated' when the adapter is not configured); with only a raw
+ * `to` number (unknown sender) no MessageLog row can be written
+ * (MessageLog requires a user) and an unconfigured adapter simply
+ * results in no send.
+ */
+export const sendWhatsAppText = async ({ to, user, body } = {}) => {
+  try {
+    if (!body) return null;
+    let recipient = null;
+    if (user) recipient = await resolveRecipient(user);
+    const phone = to ? normalizePhone(to) : recipient?.phone ? normalizePhone(recipient.phone) : null;
+    if (!phone) return null;
+
+    const provider = getWhatsAppProvider();
+    if (!provider.isConfigured()) {
+      if (!recipient?._id) return null;
+      const row = await MessageLog.create({
+        user: recipient._id,
+        channel: 'whatsapp',
+        template: 'assistant_text',
+        payload: { to: phone, body: String(body) },
+        status: 'simulated',
+      });
+      logger.info('WhatsApp text simulated (provider not configured)', {
+        userId: recipient._id?.toString(),
+      });
+      return row;
+    }
+
+    try {
+      const result = await provider.sendText({ to: phone, body: String(body) });
+      if (!recipient?._id) return { messageId: result?.messageId || null };
+      return await MessageLog.create({
+        user: recipient._id,
+        channel: 'whatsapp',
+        template: 'assistant_text',
+        payload: { to: phone, body: String(body), providerMessageId: result?.messageId || null },
+        status: 'sent',
+      });
+    } catch (providerErr) {
+      logger.error('WhatsApp text failed', { error: providerErr.message });
+      if (!recipient?._id) return null;
+      return await MessageLog.create({
+        user: recipient._id,
+        channel: 'whatsapp',
+        template: 'assistant_text',
+        payload: { to: phone, body: String(body) },
+        status: 'failed',
+        error: providerErr.message,
+      });
+    }
+  } catch (err) {
+    logger.error('WhatsApp text failed unexpectedly', { error: err.message });
     return null;
   }
 };

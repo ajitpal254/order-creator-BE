@@ -30,6 +30,7 @@ import paymentRoutes from './routes/paymentRoutes.js';
 import { stripeWebhook } from './controllers/paymentController.js';
 import trackingRoutes from './routes/trackingRoutes.js';
 import assistantRoutes from './routes/assistantRoutes.js';
+import whatsappRoutes from './routes/whatsappRoutes.js';
 import companyRoutes from './routes/companyRoutes.js';
 import gstRoutes from './routes/gstRoutes.js';
 import publicRoutes from './routes/publicRoutes.js';
@@ -126,6 +127,10 @@ app.use(cookieParser());
 // verification — wired with express.raw BEFORE the global JSON parser,
 // scoped to this single route so the 100kb JSON limit stays intact elsewhere.
 app.post('/api/payments/webhook/stripe', express.raw({ type: 'application/json', limit: '100kb' }), stripeWebhook);
+// FEAT-16 Stage 4b (v1.0): WhatsApp webhook — mounted BEFORE the global
+// JSON parser (its router captures the raw body for signature
+// verification) and OUTSIDE the JWT-protected assistant router.
+app.use('/api/assistant/whatsapp', whatsappRoutes);
 // SEC-13: 100kb default body limit (was 10mb). Multipart uploads are
 // handled by multer with its own limits, not by these parsers — see
 // src/middleware/bodyParsers.js.
