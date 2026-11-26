@@ -33,6 +33,7 @@ import {
   notifyApprovalRequested,
   notifyApprovalDecided,
 } from '../services/notify.js';
+import { emitWebhookEvent } from '../services/webhooks.js';
 import { Company, CompanyMember } from '../models/Company.js';
 import { getRates as getFxRates, convert as convertFx } from '../services/fx.js';
 import { deepCopyItems, saveDraftOrder } from '../utils/draftOrder.js';
@@ -272,6 +273,17 @@ export const createOrder = async (req, res) => {
       orderId: order._id,
       userId: req.user._id,
       totalAmount,
+    });
+
+    // FEAT-15 (v1.0): public-API webhook (never throws — failure-isolated).
+    await emitWebhookEvent(order.user, 'order.created', {
+      orderId: order._id.toString(),
+      orderNumber: order.orderNumber,
+      orderType: order.orderType,
+      status: order.status,
+      totalAmount: order.totalAmount,
+      totalQuantity: order.totalQuantity,
+      currency: order.currency,
     });
 
     // Trigger transactional emails asynchronously
@@ -744,6 +756,18 @@ export const updateOrderStatus = async (req, res) => {
       );
       if (order.status === ORDER_STATES.SHIPPED) {
         await safeComms(() => enqueueOrderShipped(order, order.user), 'enqueueOrderShipped');
+      }
+
+      // FEAT-15 (v1.0): public-API webhooks (emit never throws).
+      const statusSummary = {
+        orderId: order._id.toString(),
+        orderNumber: order.orderNumber,
+        from: previousStatus,
+        to: order.status,
+      };
+      await emitWebhookEvent(order.user, 'order.status_changed', statusSummary);
+      if (order.status === ORDER_STATES.CONFIRMED) {
+        await emitWebhookEvent(order.user, 'order.confirmed', statusSummary);
       }
     }
 
