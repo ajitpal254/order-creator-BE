@@ -68,6 +68,14 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Behind exactly one proxy hop (Render): trust X-Forwarded-For so
+// req.ip is the real client. Without this, express-rate-limit throws
+// ERR_ERL_UNEXPECTED_X_FORWARDED_FOR and every visitor shares one
+// rate-limit bucket (the proxy's IP); audit logs also record the
+// proxy instead of the client. Never use `true` here — that would
+// let clients spoof their IP through extra forwarded hops.
+app.set('trust proxy', 1);
+
 // Security & Middleware
 app.use(
   helmet({
