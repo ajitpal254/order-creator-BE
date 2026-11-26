@@ -3,20 +3,26 @@ import { executeToolByName, toolSchemas } from './tools.js';
 import { rulesProvider } from './rulesProvider.js';
 import { cloudflareProvider } from './cloudflareProvider.js';
 import { geminiProvider } from './geminiProvider.js';
+import { netlifyProvider } from './netlifyProvider.js';
 import { logger } from '../../utils/logger.js';
 
 /**
  * Assistant service (FEAT-16, v0.7)
  *
  * Env vars (see .env.example):
- *   ASSISTANT_PROVIDER   'rules' (default) | 'cloudflare' | 'gemini'.
- *                        Unset/unknown => rules, ZERO external calls.
+ *   ASSISTANT_PROVIDER   'rules' (default) | 'cloudflare' | 'gemini' |
+ *                        'netlify'. Unset/unknown => rules, ZERO
+ *                        external calls.
  *   ASSISTANT_MODEL      Model id for the Stage-2 provider.
  *   ASSISTANT_DAILY_CAP  Max user messages per user per day before the
  *                        rules provider takes over (default 50).
  *                        Read per-request, never cached at import.
  *   CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN  Cloudflare gate.
  *   GEMINI_API_KEY       Gemini gate.
+ *   NETLIFY_AI_SHARED_SECRET  Netlify gate: shared secret the backend
+ *                        sends to the frontend's assistant-ai Netlify
+ *                        Function (AI Gateway inference).
+ *   NETLIFY_AI_FUNCTION_URL   Optional override for that function URL.
  *   SUPPORT_EMAIL        Handoff recipient (falls back to ADMIN_EMAIL).
  *
  * Every exchange is persisted to AssistantConversation. Every tool
@@ -24,7 +30,12 @@ import { logger } from '../../utils/logger.js';
  * to the rules provider.
  */
 
-const PROVIDERS = { rules: rulesProvider, cloudflare: cloudflareProvider, gemini: geminiProvider };
+const PROVIDERS = {
+  rules: rulesProvider,
+  cloudflare: cloudflareProvider,
+  gemini: geminiProvider,
+  netlify: netlifyProvider,
+};
 
 export const resolveProviderName = () => {
   const raw = String(process.env.ASSISTANT_PROVIDER || 'rules').toLowerCase().trim();
