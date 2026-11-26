@@ -32,6 +32,16 @@ export const OPTIONAL_ENV_VARS = [
   'FIREBASE_PROJECT_ID',
 ];
 
+// v0.9 (FEAT-12/FEAT-14) optional, env-gated vars — documented here and
+// in .env.example, deliberately NOT added to OPTIONAL_ENV_VARS above:
+// that list's exact contents are asserted by tests/envValidation.test.js
+// (a production boot with only the legacy optional vars set must report
+// missingOptional=[] and emit no warning). These vars are warn-only in
+// effect: SELLER_GSTIN (GST QR payload; falls back to invoice
+// senderDetails.gstin), GSP_API_URL / GSP_API_KEY (IRN endpoint returns
+// 501 GSP_NOT_CONFIGURED when unset), TURNSTILE_SECRET_KEY (RFQ
+// verification skipped when unset).
+
 const requiredSchema = z.object(
   Object.fromEntries(REQUIRED_ENV_VARS.map((name) => [name, z.string().min(1)]))
 );
