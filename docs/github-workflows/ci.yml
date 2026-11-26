@@ -23,6 +23,13 @@ jobs:
 
       - run: npm ci
 
+      # Typecheck the shared-types package (v1.0 B4): builds
+      # packages/shared-types with tsc (declaration-only emit), which
+      # typechecks its sources. Belongs after the backend install step
+      # above: it uses the root devDependency typescript and resolves
+      # zod from the root install. Locally: `npm run typecheck`.
+      - run: npm run typecheck
+
       # `npm run lint` is a real ESLint run (QOL-02 flat config) and is
       # allowed to fail the build.
       - run: npm run lint

@@ -30,10 +30,15 @@ import paymentRoutes from './routes/paymentRoutes.js';
 import { stripeWebhook } from './controllers/paymentController.js';
 import trackingRoutes from './routes/trackingRoutes.js';
 import assistantRoutes from './routes/assistantRoutes.js';
+import whatsappRoutes from './routes/whatsappRoutes.js';
 import companyRoutes from './routes/companyRoutes.js';
 import gstRoutes from './routes/gstRoutes.js';
 import publicRoutes from './routes/publicRoutes.js';
-import { startOutboxWorker } from './services/outbox.js';
+import { OUTBOX_INTERVAL_MS } from './services/outbox.js';
+import { registerBuiltinJobs } from './services/jobs.js';
+import { startQueue, scheduleRecurring } from './services/queue.js';
+import publicApiRoutes from './routes/publicApiRoutes.js';
+import developerRoutes from './routes/developerRoutes.js';
 import { sanitizeMongoInput } from './middleware/mongoSanitize.js';
 import { jsonBodyParser, urlencodedBodyParser } from './middleware/bodyParsers.js';
 import { readyHandler, docsHandler } from './utils/metaHandlers.js';
@@ -122,6 +127,10 @@ app.use(cookieParser());
 // verification — wired with express.raw BEFORE the global JSON parser,
 // scoped to this single route so the 100kb JSON limit stays intact elsewhere.
 app.post('/api/payments/webhook/stripe', express.raw({ type: 'application/json', limit: '100kb' }), stripeWebhook);
+// FEAT-16 Stage 4b (v1.0): WhatsApp webhook — mounted BEFORE the global
+// JSON parser (its router captures the raw body for signature
+// verification) and OUTSIDE the JWT-protected assistant router.
+app.use('/api/assistant/whatsapp', whatsappRoutes);
 // SEC-13: 100kb default body limit (was 10mb). Multipart uploads are
 // handled by multer with its own limits, not by these parsers — see
 // src/middleware/bodyParsers.js.
@@ -171,6 +180,8 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/invoices', gstRoutes);
 app.use('/api/public', publicRoutes);
+app.use('/api/public/v1', publicApiRoutes);
+app.use('/api/developer', developerRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/reports', reportRoutes);
@@ -226,8 +237,15 @@ app.use(globalErrorHandler);
 const startServer = async () => {
   try {
     await connectDB();
-    // FEAT-01 (v0.4): start the transactional email outbox worker.
-    startOutboxWorker();
+    // v1.0 (B2): the transactional email outbox now runs through the
+    // job queue platform layer. startOutboxWorker() only ever set an
+    // interval (no immediate first pass), so boot matches that: the
+    // recurring 'email.outbox.process' job fires first after
+    // OUTBOX_INTERVAL_MS, and the queue is the ONLY mechanism running
+    // it — startOutboxWorker() is no longer called here.
+    registerBuiltinJobs();
+    await startQueue();
+    scheduleRecurring('email.outbox.process', OUTBOX_INTERVAL_MS);
     await seedDatabase();
 
     const HOST = '0.0.0.0';

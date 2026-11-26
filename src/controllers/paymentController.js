@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { Payment } from '../models/Payment.js';
 import { Order } from '../models/Order.js';
 import { notify } from '../services/notify.js';
+import { emitWebhookEvent } from '../services/webhooks.js';
 import { enqueueEmail } from '../services/outbox.js';
 import { parsePagination, paginatedResponse } from '../utils/paginate.js';
 import { logger } from '../utils/logger.js';
@@ -47,6 +48,15 @@ export const firePaymentConfirmed = async (payment) => {
       amount: payment.amount,
     },
     user: payment.buyer,
+  });
+  // FEAT-15 (v1.0): public-API webhook (emit never throws).
+  await emitWebhookEvent(order?.user || payment.buyer, 'payment.confirmed', {
+    paymentId: payment._id?.toString(),
+    orderId: (order?._id || payment.order)?.toString(),
+    orderNumber: order?.orderNumber,
+    amount: payment.amount,
+    currency: payment.currency || 'USD',
+    status: payment.status,
   });
 };
 
